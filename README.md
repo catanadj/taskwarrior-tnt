@@ -1,6 +1,6 @@
-# Taskwarrior Tasker Notifications
+# Taskwarrior TNT
 
-Tasker + Termux scripts for showing Taskwarrior tasks due near the current time. The main mode posts one Android notification per task, with actions for `Start`/`Stop`, `Done`, and `Tomorrow`.
+Taskwarrior TNT means Termux Notifications through Tasker: scripts for showing Taskwarrior tasks due near the current time. The main mode posts one Android notification per task, with actions for `Start`/`Stop`, `Done`, and `Tomorrow`.
 
 By default, pending tasks due from the last 2 hours through the next 2 hours are shown.
 
@@ -144,7 +144,7 @@ jot timelog stop <uuid>
 Action scripts log to:
 
 ```sh
-~/.local/state/taskwarrior-tasker-notification/action.log
+~/.local/state/taskwarrior-tnt/action.log
 ```
 
 Toasts show short results such as `<uuid-prefix> start` or `<uuid-prefix> completed`. Jot is mentioned only when it is missing or fails.

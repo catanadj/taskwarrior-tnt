@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-# Installs Taskwarrior Tasker notification scripts into Termux:Tasker.
+# Installs Taskwarrior TNT scripts into Termux:Tasker.
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${TW_INSTALL_DIR:-$HOME/.termux/tasker}"

@@ -132,7 +132,7 @@ START_STOP_SCRIPT="${TW_START_STOP_SCRIPT:-$HOME/.termux/tasker/taskwarrior_star
 START_STOP_ACTION_ENABLED="${TW_START_STOP_ACTION_ENABLED:-1}"
 JOT_TIMELOG_ENABLED="${TW_JOT_TIMELOG_ENABLED:-1}"
 JOT_BIN="${JOT_BIN:-jot}"
-STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tasker-notification}"
+STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 STATE_FILE="$STATE_DIR/active-notifications"
 SNOOZE_FILE="$STATE_DIR/snoozed-tasks"
 GUI_CACHE_FILE="${TW_GUI_CACHE_FILE:-$STATE_DIR/gui-cache.json}"
@@ -205,7 +205,7 @@ fi
 if [[ "$COMMAND" == "--test-notification" ]]; then
   termux-notification \
     --id 999001 \
-    --title "Taskwarrior notification test" \
+    --title "Taskwarrior TNT test" \
     --content "If you can see this, Termux:API notifications are working." \
     --priority high
   echo "Posted test notification 999001."
@@ -264,7 +264,7 @@ doctor_check_executable() {
 }
 
 run_doctor() {
-  echo "Taskwarrior Tasker doctor"
+  echo "Taskwarrior TNT doctor"
   echo
   echo "Config:"
   if [[ -f "$CONFIG_FILE" ]]; then
@@ -327,15 +327,15 @@ run_doctor() {
 
   echo "Taskwarrior export:"
   if command -v "$TASK_BIN" >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-    if export_count="$("$TASK_BIN" rc.hooks:off rc.verbose:nothing rc.json.array:on status:pending export 2>/tmp/taskwarrior-tasker-doctor.err | python3 -c 'import json,sys; data=sys.stdin.read(); print(len(json.loads(data or "[]")))' 2>>/tmp/taskwarrior-tasker-doctor.err)"; then
+    if export_count="$("$TASK_BIN" rc.hooks:off rc.verbose:nothing rc.json.array:on status:pending export 2>/tmp/taskwarrior-tnt-doctor.err | python3 -c 'import json,sys; data=sys.stdin.read(); print(len(json.loads(data or "[]")))' 2>>/tmp/taskwarrior-tnt-doctor.err)"; then
       echo "OK: pending export returned $export_count task(s)"
     else
       echo "WARN: task export failed"
-      if [[ -s /tmp/taskwarrior-tasker-doctor.err ]]; then
-        sed -n '1,3p' /tmp/taskwarrior-tasker-doctor.err
+      if [[ -s /tmp/taskwarrior-tnt-doctor.err ]]; then
+        sed -n '1,3p' /tmp/taskwarrior-tnt-doctor.err
       fi
     fi
-    rm -f /tmp/taskwarrior-tasker-doctor.err
+    rm -f /tmp/taskwarrior-tnt-doctor.err
   else
     echo "SKIP: task export check needs task and python3"
   fi
@@ -748,7 +748,7 @@ if [[ "$DRY_RUN" != "1" && "$GROUP_SUMMARY_ENABLED" == "1" ]]; then
   if [[ "$window_count" -gt 0 ]]; then
     termux-notification \
       --id "$EXECUTION_GROUP_SUMMARY_ID" \
-      --title "Taskwarrior window" \
+      --title "Taskwarrior TNT window" \
       --content "$window_count task notification(s)" \
       --group "$EXECUTION_NOTIFICATION_GROUP" \
       --alert-once \
@@ -760,7 +760,7 @@ if [[ "$DRY_RUN" != "1" && "$GROUP_SUMMARY_ENABLED" == "1" ]]; then
   if [[ "$overdue_count" -gt 0 ]]; then
     termux-notification \
       --id "$OVERDUE_GROUP_SUMMARY_ID" \
-      --title "Taskwarrior overdue" \
+      --title "Taskwarrior TNT overdue" \
       --content "$overdue_count overdue task notification(s)" \
       --group "$OVERDUE_NOTIFICATION_GROUP" \
       --alert-once \

@@ -39,7 +39,7 @@ fi
 restore_override TW_STATE_DIR
 
 NOTIFICATION_ID="${1:-}"
-STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tasker-notification}"
+STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 STATE_FILE="$STATE_DIR/active-notifications"
 
 if [[ -z "$NOTIFICATION_ID" || ! -f "$STATE_FILE" ]]; then

@@ -46,7 +46,7 @@ TASK_UUID="${1:-}"
 NOTIFICATION_ID="${2:-}"
 SNOOZE_UNTIL="${3:-+1 hour}"
 TASK_BIN="${TASK_BIN:-task}"
-STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tasker-notification}"
+STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 SNOOZE_FILE="$STATE_DIR/snoozed-tasks"
 FORGET_SCRIPT="${TW_FORGET_SCRIPT:-$HOME/.termux/tasker/taskwarrior_forget_notification.sh}"
 

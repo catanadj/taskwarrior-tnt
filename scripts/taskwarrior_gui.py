@@ -31,7 +31,7 @@ class Config:
     future_hours: float = 2
     max_tasks: int = 12
     state_dir: str = os.path.expanduser(
-        "~/.local/state/taskwarrior-tasker-notification"
+        "~/.local/state/taskwarrior-tnt"
     )
     start_stop_script: str = os.path.expanduser(
         "~/.termux/tasker/taskwarrior_start_stop_task.sh"
@@ -46,10 +46,10 @@ class Config:
         "~/.termux/tasker/taskwarrior_notify_due_tasks.sh"
     )
     action_log_file: str = os.path.expanduser(
-        "~/.local/state/taskwarrior-tasker-notification/action.log"
+        "~/.local/state/taskwarrior-tnt/action.log"
     )
     gui_cache_file: str = os.path.expanduser(
-        "~/.local/state/taskwarrior-tasker-notification/gui-cache.json"
+        "~/.local/state/taskwarrior-tnt/gui-cache.json"
     )
     gui_cache_max_age_seconds: int = 900
 
@@ -96,7 +96,7 @@ def load_config(path: str) -> Config:
             return default
 
     state_dir = values.get(
-        "TW_STATE_DIR", os.path.expanduser("~/.local/state/taskwarrior-tasker-notification")
+        "TW_STATE_DIR", os.path.expanduser("~/.local/state/taskwarrior-tnt")
     )
     return Config(
         task_bin=values.get("TASK_BIN", "task"),
@@ -484,7 +484,7 @@ def main() -> None:
 
         title = tg.TextView(
             activity,
-            f"Taskwarrior | {len(overdue)} overdue | {len(window)} window",
+            f"Taskwarrior TNT | {len(overdue)} overdue | {len(window)} window",
             root,
         )
         title.settextsize(24)
