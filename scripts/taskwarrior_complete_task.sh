@@ -29,7 +29,7 @@ restore_override() {
   fi
 }
 
-for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED; do
+for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT; do
   remember_override "$config_name"
 done
 
@@ -38,7 +38,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED; do
+for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT; do
   restore_override "$config_name"
 done
 
@@ -53,6 +53,7 @@ JOT_BIN="${JOT_BIN:-jot}"
 JOT_RUNNER="${JOT_RUNNER:-}"
 ACTION_LOG_FILE="${TW_ACTION_LOG_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt/action.log}"
 ACTION_TOAST_ENABLED="${TW_ACTION_TOAST_ENABLED:-1}"
+COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 JOT_STATUS="off"
 TASK_SHORT_ID="${TASK_UUID%%-*}"
 ACTIVE_STARTED_EPOCH=""
@@ -61,9 +62,16 @@ ACTIVE_DURATION=""
 export HOME="${HOME:-/data/data/com.termux/files/home}"
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:${PATH:-}"
 
+if [[ ! -r "$COMMON_SCRIPT" ]]; then
+  echo "ERROR: shared helper is missing: $COMMON_SCRIPT"
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$COMMON_SCRIPT"
+
 log_action() {
   mkdir -p "$(dirname "$ACTION_LOG_FILE")" 2>/dev/null || true
-  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$ACTION_LOG_FILE" 2>/dev/null || true
+  { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$ACTION_LOG_FILE"; } 2>/dev/null || true
 }
 
 show_toast() {
@@ -172,9 +180,13 @@ fi
 log_action "complete invoked uuid=$TASK_UUID task_bin=$TASK_BIN jot_bin=$JOT_BIN home=$HOME"
 
 if ! command -v "$TASK_BIN" >/dev/null 2>&1; then
+  show_toast "$TASK_SHORT_ID completion failed; task command missing"
   echo "ERROR: task command not found"
   exit 2
 fi
+
+tnt_acquire_state_lock "$STATE_DIR"
+trap tnt_release_state_lock EXIT
 
 if ACTIVE_STARTED_EPOCH="$(task_start_epoch)"; then
   ACTIVE_DURATION="$(format_duration "$ACTIVE_STARTED_EPOCH" 2>/dev/null || true)"
@@ -205,16 +217,18 @@ else
   JOT_STATUS="disabled"
 fi
 
-"$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" done
-log_action "OK task done uuid=$TASK_UUID"
+if output="$("$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" done 2>&1)"; then
+  log_action "OK task done uuid=$TASK_UUID output=$output"
+else
+  rc=$?
+  log_action "ERROR task done failed rc=$rc uuid=$TASK_UUID output=$output"
+  show_toast "$TASK_SHORT_ID completion failed"
+  echo "ERROR: task completion failed: $output"
+  exit "$rc"
+fi
 
 if [[ -f "$SNOOZE_FILE" ]]; then
-  tmp_file="$(mktemp)"
-  while IFS=$'\t' read -r active_uuid active_until; do
-    [[ "$active_uuid" == "$TASK_UUID" ]] && continue
-    [[ -n "$active_uuid" && -n "$active_until" ]] && printf '%s\t%s\n' "$active_uuid" "$active_until" >> "$tmp_file"
-  done < "$SNOOZE_FILE"
-  mv "$tmp_file" "$SNOOZE_FILE"
+  tnt_remove_snooze_uuid "$SNOOZE_FILE" "$TASK_UUID"
 fi
 
 if [[ -n "$NOTIFICATION_ID" ]] && command -v termux-notification-remove >/dev/null 2>&1; then

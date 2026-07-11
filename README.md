@@ -11,6 +11,7 @@ By default, pending tasks due from the last 2 hours through the next 2 hours are
 - `taskwarrior_complete_task.sh`: completes a task from the `Done` button.
 - `taskwarrior_snooze_task.sh`: handles local snooze and tomorrow actions.
 - `taskwarrior_forget_notification.sh`: updates state when a notification is dismissed.
+- `taskwarrior_tnt_common.sh`: shared state locking and atomic update helpers.
 - `taskwarrior_gui.sh`: optional Termux:GUI dashboard.
 - `taskwarrior_tasker.conf`: config file copied to `~/.termux/tasker/`.
 
@@ -104,6 +105,7 @@ Notes:
 - `TW_REORDER_EACH_RUN=1` removes and reposts all matching notifications each scan so Android's recency ordering is refreshed. This can cause visible refreshes or sounds.
 - `TW_PROMOTE_STARTED_ON_START=1` only promotes the task you just started. It removes that task notification and posts it after the normal scan order so Android usually places it on top.
 - Quiet hours skip notification posting but still let the scan run.
+- Active tasks and execution-window tasks take precedence over overdue tasks when `TW_MAX_TASKS` is reached.
 - `TW_SNOOZE_TOMORROW_MODE=modify_due` runs `task <uuid> modify due:due+1d`.
 - One-off environment variables override the config, for example `TW_DRY_RUN=1`.
 
@@ -122,7 +124,7 @@ Notification title format:
 
 If a task has a `duration` UDA such as `PT10M`, the displayed range is `due - duration` through `due`. Without duration, the title uses `Due HH:MM`.
 
-Notification content starts with one of `OVERDUE`, `SOON`, `NOW`, or `DUE`. Started tasks are prefixed with `ACTIVE`. The content also includes the time delta and optional project/tags.
+Notification content starts with one of `OVERDUE`, `SOON`, `NOW`, or `DUE`. Started tasks use `ACTIVE` instead. The content also includes the time delta and optional project/tags.
 
 Actions:
 
@@ -130,7 +132,7 @@ Actions:
 - `Done`: completes the task, removes its notification, and stops jot timelog if the task was active.
 - `Tomorrow`: moves the due date to tomorrow by default.
 
-Each notification uses a stable Android notification ID derived from the Taskwarrior UUID. Existing notifications update in place with `--alert-once`; swiped notifications return on the next scan if still relevant.
+Each notification uses a stable Android notification ID derived from the Taskwarrior UUID. TNT stores a locked state manifest and only calls Android when displayed task data changes. Swiped notifications are removed from the manifest and return on the next scan if still relevant.
 
 ## Jot Integration
 
@@ -147,7 +149,7 @@ Action scripts log to:
 ~/.local/state/taskwarrior-tnt/action.log
 ```
 
-Toasts show short results such as `<uuid-prefix> start` or `<uuid-prefix> completed`. Jot is mentioned only when it is missing or fails.
+Toasts show short results such as `<uuid-prefix> start` or `<uuid-prefix> completed`. Failed Taskwarrior actions are logged and produce a failure toast. Jot is mentioned only when it is missing or fails.
 
 If `jot` has a `/usr/bin/env` shebang that fails from Android notification actions, the scripts auto-detect common `python3`, `bash`, and `sh` shebangs. You can force a runner:
 

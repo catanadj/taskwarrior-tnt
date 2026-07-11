@@ -11,6 +11,7 @@ FORCE_CONFIG="${TW_INSTALL_FORCE_CONFIG:-0}"
 RUN_CHECKS="${TW_INSTALL_RUN_CHECKS:-1}"
 
 required_files=(
+  taskwarrior_tnt_common.sh
   taskwarrior_window_reminders.sh
   taskwarrior_notify_due_tasks.sh
   taskwarrior_complete_task.sh

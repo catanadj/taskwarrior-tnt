@@ -29,7 +29,7 @@ restore_override() {
   fi
 }
 
-for config_name in TASK_BIN TW_NOTIFY_SCRIPT TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_PROMOTE_STARTED_ON_START; do
+for config_name in TASK_BIN TW_NOTIFY_SCRIPT TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_PROMOTE_STARTED_ON_START TW_COMMON_SCRIPT TW_STATE_DIR; do
   remember_override "$config_name"
 done
 
@@ -38,7 +38,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-for config_name in TASK_BIN TW_NOTIFY_SCRIPT TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_PROMOTE_STARTED_ON_START; do
+for config_name in TASK_BIN TW_NOTIFY_SCRIPT TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_PROMOTE_STARTED_ON_START TW_COMMON_SCRIPT TW_STATE_DIR; do
   restore_override "$config_name"
 done
 
@@ -52,6 +52,8 @@ JOT_RUNNER="${JOT_RUNNER:-}"
 ACTION_LOG_FILE="${TW_ACTION_LOG_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt/action.log}"
 ACTION_TOAST_ENABLED="${TW_ACTION_TOAST_ENABLED:-1}"
 PROMOTE_STARTED_ON_START="${TW_PROMOTE_STARTED_ON_START:-1}"
+COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
+STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 JOT_STATUS="off"
 TASK_SHORT_ID="${TASK_UUID%%-*}"
 ACTIVE_STARTED_EPOCH=""
@@ -60,9 +62,16 @@ ACTIVE_DURATION=""
 export HOME="${HOME:-/data/data/com.termux/files/home}"
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:${PATH:-}"
 
+if [[ ! -r "$COMMON_SCRIPT" ]]; then
+  echo "ERROR: shared helper is missing: $COMMON_SCRIPT"
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$COMMON_SCRIPT"
+
 log_action() {
   mkdir -p "$(dirname "$ACTION_LOG_FILE")" 2>/dev/null || true
-  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$ACTION_LOG_FILE" 2>/dev/null || true
+  { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$ACTION_LOG_FILE"; } 2>/dev/null || true
 }
 
 show_toast() {
@@ -173,9 +182,28 @@ fi
 log_action "start_stop invoked action=$ACTION uuid=$TASK_UUID task_bin=$TASK_BIN jot_bin=$JOT_BIN home=$HOME"
 
 if ! command -v "$TASK_BIN" >/dev/null 2>&1; then
+  show_toast "$TASK_SHORT_ID $ACTION failed; task command missing"
   echo "ERROR: task command not found"
   exit 2
 fi
+
+tnt_acquire_state_lock "$STATE_DIR"
+trap tnt_release_state_lock EXIT
+
+run_task_action() {
+  local action="$1"
+  local output rc
+  if output="$("$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" "$action" 2>&1)"; then
+    log_action "OK task $action uuid=$TASK_UUID output=$output"
+    return 0
+  else
+    rc=$?
+    log_action "ERROR task $action failed rc=$rc uuid=$TASK_UUID output=$output"
+    show_toast "$TASK_SHORT_ID $action failed"
+    echo "ERROR: task $action failed: $output"
+    return "$rc"
+  fi
+}
 
 run_jot_timelog() {
   local action="$1"
@@ -203,8 +231,7 @@ run_jot_timelog() {
 
 case "$ACTION" in
   start)
-    "$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" start
-    log_action "OK task start uuid=$TASK_UUID"
+    run_task_action start
     run_jot_timelog start
     message="Task started"
     ;;
@@ -214,8 +241,7 @@ case "$ACTION" in
     else
       ACTIVE_STARTED_EPOCH=""
     fi
-    "$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" stop
-    log_action "OK task stop uuid=$TASK_UUID"
+    run_task_action stop
     run_jot_timelog stop
     message="Task stopped"
     ;;
@@ -239,6 +265,8 @@ if command -v termux-toast >/dev/null 2>&1; then
       ;;
   esac
 fi
+
+tnt_release_state_lock
 
 if [[ -x "$NOTIFY_SCRIPT" ]]; then
   if [[ "$ACTION" == "start" && "$PROMOTE_STARTED_ON_START" == "1" ]]; then

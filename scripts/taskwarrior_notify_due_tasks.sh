@@ -63,6 +63,7 @@ for config_name in \
   TW_START_STOP_ACTION_ENABLED \
   TW_JOT_TIMELOG_ENABLED \
   JOT_BIN \
+  TW_COMMON_SCRIPT \
   TW_STATE_DIR \
   TW_GUI_CACHE_FILE; do
   remember_override "$config_name"
@@ -101,6 +102,7 @@ for config_name in \
   TW_START_STOP_ACTION_ENABLED \
   TW_JOT_TIMELOG_ENABLED \
   JOT_BIN \
+  TW_COMMON_SCRIPT \
   TW_STATE_DIR \
   TW_GUI_CACHE_FILE; do
   restore_override "$config_name"
@@ -132,12 +134,21 @@ START_STOP_SCRIPT="${TW_START_STOP_SCRIPT:-$HOME/.termux/tasker/taskwarrior_star
 START_STOP_ACTION_ENABLED="${TW_START_STOP_ACTION_ENABLED:-1}"
 JOT_TIMELOG_ENABLED="${TW_JOT_TIMELOG_ENABLED:-1}"
 JOT_BIN="${JOT_BIN:-jot}"
+COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 STATE_FILE="$STATE_DIR/active-notifications"
 SNOOZE_FILE="$STATE_DIR/snoozed-tasks"
 GUI_CACHE_FILE="${TW_GUI_CACHE_FILE:-$STATE_DIR/gui-cache.json}"
 PROMOTE_UUID="${TW_PROMOTE_UUID:-}"
+NOTIFICATION_CONFIG_SIGNATURE="$EXECUTION_NOTIFICATION_GROUP|$OVERDUE_NOTIFICATION_GROUP|$EXECUTION_NOTIFICATION_ICON|$OVERDUE_NOTIFICATION_ICON|$STARTED_NOTIFICATION_ICON|$NOTIFICATION_PRIORITY|$STARTED_NOTIFICATION_PRIORITY|$COMPLETE_SCRIPT|$FORGET_SCRIPT|$SNOOZE_SCRIPT|$START_STOP_SCRIPT|$START_STOP_ACTION_ENABLED"
 export TASK_BIN
+
+if [[ ! -r "$COMMON_SCRIPT" ]]; then
+  echo "ERROR: shared helper is missing: $COMMON_SCRIPT"
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$COMMON_SCRIPT"
 
 if ! command -v "$TASK_BIN" >/dev/null 2>&1; then
   if [[ "$DOCTOR_MODE" == "1" ]]; then
@@ -204,11 +215,11 @@ fi
 
 if [[ "$COMMAND" == "--test-notification" ]]; then
   termux-notification \
-    --id 999001 \
+    --id 998999 \
     --title "Taskwarrior TNT test" \
     --content "If you can see this, Termux:API notifications are working." \
     --priority high
-  echo "Posted test notification 999001."
+  echo "Posted test notification 998999."
   exit 0
 fi
 
@@ -357,22 +368,29 @@ if [[ "$DOCTOR_MODE" == "1" ]]; then
 fi
 
 mkdir -p "$STATE_DIR"
+tnt_acquire_state_lock "$STATE_DIR"
 touch "$SNOOZE_FILE"
 
 declare -A stale_notifications=()
+declare -A previous_fingerprints=()
 if [[ -f "$STATE_FILE" ]]; then
-  while IFS= read -r previous_id; do
+  while IFS=$'\t' read -r previous_id previous_uuid previous_fingerprint _; do
     if [[ -n "$previous_id" ]]; then
       stale_notifications["$previous_id"]=1
+      previous_fingerprints["$previous_id"]="$previous_fingerprint"
     fi
   done < "$STATE_FILE"
 fi
 
 records_file="$(mktemp)"
 current_file="$(mktemp)"
-trap 'rm -f "$records_file" "$current_file"' EXIT
+cleanup() {
+  rm -f "$records_file" "$current_file"
+  tnt_release_state_lock
+}
+trap cleanup EXIT
 
-if ! python3 - "$WINDOW_PAST_HOURS" "$WINDOW_FUTURE_HOURS" "$MAX_TASKS" "$SNOOZE_FILE" "$GUI_CACHE_FILE" > "$records_file" <<'PY'
+if ! python3 - "$WINDOW_PAST_HOURS" "$WINDOW_FUTURE_HOURS" "$MAX_TASKS" "$SNOOZE_FILE" "$GUI_CACHE_FILE" "$NOTIFICATION_CONFIG_SIGNATURE" > "$records_file" <<'PY'
 import hashlib
 import json
 import os
@@ -451,8 +469,12 @@ try:
     max_tasks = int(sys.argv[3])
     snooze_file = sys.argv[4]
     gui_cache_file = sys.argv[5]
+    notification_config_signature = sys.argv[6]
 except (IndexError, ValueError):
     print("ERROR\tinvalid window settings")
+    sys.exit(2)
+if past_hours < 0 or future_hours < 0 or max_tasks < 1:
+    print("ERROR\twindow hours must be non-negative and max tasks must be at least 1")
     sys.exit(2)
 
 now = datetime.now().astimezone()
@@ -568,7 +590,7 @@ for task in tasks:
         delta_text = f"due in {format_delta(due - now)}"
 
     if is_started:
-        status_text = f"ACTIVE {status_text}"
+        status_text = "ACTIVE"
 
     content_parts = [status_text, delta_text]
     if project:
@@ -582,8 +604,17 @@ for task in tasks:
     matches.append((bucket, due, -urgency, notification_id(uuid, bucket), uuid, title, content, task_action, task_button, started_value))
 
 matches.sort(key=lambda item: (item[1], item[2]))
+active_matches = [item for item in matches if item[9] == "1"]
+window_matches = [item for item in matches if item[0] == "window" and item[9] != "1"]
+overdue_matches = [item for item in matches if item[0] == "overdue" and item[9] != "1"]
+
+# Active tasks and the execution window take precedence over overdue backlog.
+priority_matches = active_matches + window_matches + overdue_matches
+selected_uuids = {item[4] for item in priority_matches[:max_tasks]}
+selected_matches = [item for item in matches if item[4] in selected_uuids]
+
 cache_rows = []
-for bucket, due, urgency_sort, notif_id, uuid, title, content, task_action, task_button, started_value in matches[:max_tasks]:
+for bucket, due, urgency_sort, notif_id, uuid, title, content, task_action, task_button, started_value in selected_matches:
     cache_rows.append(
         {
             "bucket": bucket,
@@ -610,8 +641,23 @@ except OSError:
 
 # Android tends to display the most recently posted notification at the top.
 # Emit later tasks first so the closest due task is posted last and appears first.
-for bucket, _, _, notif_id, uuid, title, content, task_action, task_button, started_value in reversed(matches[:max_tasks]):
-    fields = [bucket, str(notif_id), uuid, title, content, task_action, task_button, started_value]
+for bucket, _, _, notif_id, uuid, title, content, task_action, task_button, started_value in reversed(selected_matches):
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            [
+                bucket,
+                title,
+                content,
+                task_action,
+                task_button,
+                started_value,
+                notification_config_signature,
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    fields = [bucket, str(notif_id), uuid, title, content, task_action, task_button, started_value, fingerprint]
     print("\t".join(field.replace("\t", " ") for field in fields))
 PY
 then
@@ -631,13 +677,11 @@ fi
 
 if in_quiet_hours; then
   skipped_count="$(wc -l < "$records_file")"
-  rm -f "$records_file" "$current_file"
-  trap - EXIT
   echo "Quiet hours active; skipped $skipped_count Taskwarrior notification(s)."
   exit 0
 fi
 
-while IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value; do
+while IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value fingerprint; do
   [[ -z "$notification_id" ]] && continue
 
   if [[ "$notification_id" == "ERROR" ]]; then
@@ -665,6 +709,7 @@ post_notification_record() {
   local task_action="$6"
   local task_button="$7"
   local started_value="$8"
+  local fingerprint="$9"
   local notification_group notification_icon notification_priority
   local complete_action delete_action snooze_hour_action snooze_tomorrow_action
   local button1_text button1_action
@@ -677,7 +722,7 @@ post_notification_record() {
   fi
 
   stale_notifications["$notification_id"]=""
-  printf '%s\n' "$notification_id" >> "$current_file"
+  printf '%s\t%s\t%s\n' "$notification_id" "$uuid" "$fingerprint" >> "$current_file"
   if [[ "$bucket" == "overdue" ]]; then
     overdue_count=$((overdue_count + 1))
     notification_group="$OVERDUE_NOTIFICATION_GROUP"
@@ -705,6 +750,13 @@ post_notification_record() {
     button1_text="Snooze 1h"
     button1_action="$snooze_hour_action"
   fi
+  if [[ "$DRY_RUN" != "1" &&
+        "$REORDER_EACH_RUN" != "1" &&
+        "$uuid" != "$PROMOTE_UUID" &&
+        "${previous_fingerprints[$notification_id]:-}" == "$fingerprint" ]]; then
+    echo "Unchanged: $notification_id $title"
+    return 0
+  fi
   if [[ "$DRY_RUN" == "1" ]]; then
     printf 'DRY_RUN id=%s uuid=%s reorder=%s title=%s content=%s button1=%s button2=Done action=%s\n' "$notification_id" "$uuid" "$REORDER_EACH_RUN" "$title" "$content" "$button1_text" "$complete_action"
   else
@@ -731,17 +783,17 @@ post_notification_record() {
   fi
 }
 
-while IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value; do
+while IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value fingerprint; do
   if [[ -n "$PROMOTE_UUID" && "$uuid" == "$PROMOTE_UUID" ]]; then
-    promoted_record="$bucket"$'\t'"$notification_id"$'\t'"$uuid"$'\t'"$title"$'\t'"$content"$'\t'"$task_action"$'\t'"$task_button"$'\t'"$started_value"
+    promoted_record="$bucket"$'\t'"$notification_id"$'\t'"$uuid"$'\t'"$title"$'\t'"$content"$'\t'"$task_action"$'\t'"$task_button"$'\t'"$started_value"$'\t'"$fingerprint"
     continue
   fi
-  post_notification_record "$bucket" "$notification_id" "$uuid" "$title" "$content" "$task_action" "$task_button" "$started_value"
+  post_notification_record "$bucket" "$notification_id" "$uuid" "$title" "$content" "$task_action" "$task_button" "$started_value" "$fingerprint"
 done < "$records_file"
 
 if [[ -n "$promoted_record" ]]; then
-  IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value <<< "$promoted_record"
-  post_notification_record "$bucket" "$notification_id" "$uuid" "$title" "$content" "$task_action" "$task_button" "$started_value"
+  IFS=$'\t' read -r bucket notification_id uuid title content task_action task_button started_value fingerprint <<< "$promoted_record"
+  post_notification_record "$bucket" "$notification_id" "$uuid" "$title" "$content" "$task_action" "$task_button" "$started_value" "$fingerprint"
 fi
 
 if [[ "$DRY_RUN" != "1" && "$GROUP_SUMMARY_ENABLED" == "1" ]]; then
@@ -776,8 +828,9 @@ for notification_id in "${!stale_notifications[@]}"; do
   fi
 done
 
-mv "$current_file" "$STATE_FILE"
-rm -f "$records_file" "$current_file"
-trap - EXIT
+tracked_count="$(wc -l < "$current_file")"
+if [[ "$DRY_RUN" != "1" ]]; then
+  mv "$current_file" "$STATE_FILE"
+fi
 
-echo "Posted $(wc -l < "$STATE_FILE") Taskwarrior notification(s)."
+echo "Tracked $tracked_count Taskwarrior notification(s)."

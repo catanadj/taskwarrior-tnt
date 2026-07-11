@@ -30,6 +30,7 @@ restore_override() {
 }
 
 remember_override TW_STATE_DIR
+remember_override TW_COMMON_SCRIPT
 
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck source=/dev/null
@@ -37,22 +38,24 @@ if [[ -f "$CONFIG_FILE" ]]; then
 fi
 
 restore_override TW_STATE_DIR
+restore_override TW_COMMON_SCRIPT
 
 NOTIFICATION_ID="${1:-}"
 STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 STATE_FILE="$STATE_DIR/active-notifications"
+COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 
 if [[ -z "$NOTIFICATION_ID" || ! -f "$STATE_FILE" ]]; then
   exit 0
 fi
 
-tmp_file="$(mktemp)"
-trap 'rm -f "$tmp_file"' EXIT
+if [[ ! -r "$COMMON_SCRIPT" ]]; then
+  echo "ERROR: shared helper is missing: $COMMON_SCRIPT"
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$COMMON_SCRIPT"
 
-while IFS= read -r active_id; do
-  [[ "$active_id" == "$NOTIFICATION_ID" ]] && continue
-  [[ -n "$active_id" ]] && printf '%s\n' "$active_id" >> "$tmp_file"
-done < "$STATE_FILE"
-
-mv "$tmp_file" "$STATE_FILE"
-trap - EXIT
+tnt_acquire_state_lock "$STATE_DIR"
+trap tnt_release_state_lock EXIT
+tnt_remove_manifest_id "$STATE_FILE" "$NOTIFICATION_ID"

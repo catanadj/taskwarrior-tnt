@@ -357,7 +357,7 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
         else:
             status = "DUE"
         if is_started:
-            status = f"ACTIVE {status}"
+            status = "ACTIVE"
 
         if now < start_time:
             delta = f"starts in {format_delta(start_time - now)}"
@@ -386,7 +386,18 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
         )
 
     rows.sort(key=lambda row: (row.due, -row.urgency))
-    rows = rows[: config.max_tasks]
+    active_rows = [row for row in rows if row.action == "stop"]
+    window_rows = [
+        row for row in rows if row.bucket == "window" and row.action != "stop"
+    ]
+    overdue_rows = [
+        row for row in rows if row.bucket == "overdue" and row.action != "stop"
+    ]
+    selected = {
+        row.uuid
+        for row in (active_rows + window_rows + overdue_rows)[: config.max_tasks]
+    }
+    rows = [row for row in rows if row.uuid in selected]
     write_task_cache(config, rows)
     return rows, ""
 
