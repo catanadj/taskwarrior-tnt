@@ -45,6 +45,7 @@ from taskwarrior_tnt.state import (
 from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
 from taskwarrior_tnt.integrations import IntegrationStatus, JotIntegration
+from taskwarrior_tnt.nautical_progress import progress_from_occurrences
 from taskwarrior_tnt.reminders import build_reminders
 from taskwarrior_tnt.config import migrate_to_toml, validate
 
@@ -137,6 +138,45 @@ if os.environ.get("TNT_TEST_ACTION_FAIL") == "1":
 printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
 """,
         )
+
+    def _write_fake_nautical_core(self) -> Path:
+        root = self.temp_dir / "nautical"
+        package = root / "nautical_core"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("")
+        (package / "scheduler_cursor.py").write_text(
+            """class OccurrenceCursor:
+    def __init__(self, local_datetime, **kwargs):
+        self.local_datetime = local_datetime
+
+class OccurrenceRangeRequest:
+    def __init__(self, cursor, **kwargs):
+        self.cursor = cursor
+"""
+        )
+        (package / "scheduler_service.py").write_text(
+            """from datetime import datetime
+from types import SimpleNamespace
+
+class SchedulerService:
+    def __init__(self, task):
+        self.task = task
+        zone = datetime.now().astimezone().tzinfo
+        context = SimpleNamespace(timezone=zone)
+        self.session = SimpleNamespace(evaluator=SimpleNamespace(context=context))
+
+    @classmethod
+    def from_task(cls, task):
+        return cls(task)
+
+    def collect_request(self, request):
+        due = datetime.strptime(self.task["due"], "%Y%m%dT%H%M%S").astimezone()
+        values = [due.replace(hour=9, minute=0), due.replace(hour=17, minute=0)]
+        rows = tuple(SimpleNamespace(local_datetime=value) for value in values)
+        return SimpleNamespace(failure=None, occurrences=rows)
+"""
+        )
+        return root
 
     def _env(self, **overrides: str) -> dict[str, str]:
         task_json = json.dumps(self.task_data, separators=(",", ":"))
@@ -751,25 +791,45 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
             "\n".join(self.calls()),
         )
 
-    def test_completion_toast_prefers_nautical_chain_progress(self) -> None:
+    def test_completion_toast_accounts_for_nautical_daily_occurrences(self) -> None:
         uuid = "4d" * 18
+        nautical_root = self._write_fake_nautical_core()
         self.task_data = [
             {
                 "uuid": uuid,
                 "status": "pending",
                 "description": "recurring task",
-                "due": "20260812T130000",
+                "due": "20260812T090000",
                 "chainID": "nautical-chain",
-                "link": 3,
-                "chainMax": 20,
+                "link": 47,
+                "chainMax": 200,
                 "anchor": "w:mon..fri@t=09:00,17:00",
             }
         ]
-        self.run_script("taskwarrior_complete_task.sh", uuid, TNT_TEST_UUID=uuid)
+        self.run_script(
+            "taskwarrior_complete_task.sh",
+            uuid,
+            TNT_TEST_UUID=uuid,
+            TNT_TEST_COMPLETED_COUNT="3",
+            TNT_TEST_PENDING_COUNT="17",
+            NAUTICAL_CORE_PATH=str(nautical_root),
+        )
         self.assertIn(
-            "termux-toast Task 3 out of 20 complete; 17 remaining",
+            "termux-toast Task 3 out of 21 complete; 18 remaining; occurrence 1 of 2 today",
             "\n".join(self.calls()),
         )
+
+    def test_daily_progress_uses_resolved_random_slot_order(self) -> None:
+        due = FIXED_NOW.replace(hour=13, minute=11)
+        occurrences = [
+            FIXED_NOW.replace(hour=6, minute=0),
+            due,
+            FIXED_NOW.replace(hour=16, minute=51),
+        ]
+        progress = progress_from_occurrences(due, occurrences)
+        self.assertIsNotNone(progress)
+        assert progress is not None
+        self.assertEqual((2, 3, 1), (progress.position, progress.total, progress.remaining))
 
     def test_start_and_stop_are_idempotent(self) -> None:
         uuid = "eeeeeeee-0000-0000-0000-000000000000"

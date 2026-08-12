@@ -29,7 +29,7 @@ restore_override() {
   fi
 }
 
-for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT; do
+for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT TW_NAUTICAL_PROGRESS_ENABLED NAUTICAL_CORE_PATH TW_COMMAND_TIMEOUT_SECONDS; do
   remember_override "$config_name"
 done
 
@@ -38,7 +38,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT; do
+for config_name in TASK_BIN TW_FORGET_SCRIPT TW_STATE_DIR TW_JOT_TIMELOG_ENABLED JOT_BIN JOT_RUNNER TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_COMMON_SCRIPT TW_NAUTICAL_PROGRESS_ENABLED NAUTICAL_CORE_PATH TW_COMMAND_TIMEOUT_SECONDS; do
   restore_override "$config_name"
 done
 
@@ -53,12 +53,18 @@ JOT_BIN="${JOT_BIN:-jot}"
 JOT_RUNNER="${JOT_RUNNER:-}"
 ACTION_LOG_FILE="${TW_ACTION_LOG_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt/action.log}"
 ACTION_TOAST_ENABLED="${TW_ACTION_TOAST_ENABLED:-1}"
+NAUTICAL_PROGRESS_ENABLED="${TW_NAUTICAL_PROGRESS_ENABLED:-1}"
 COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 JOT_STATUS="off"
 TASK_SHORT_ID="${TASK_UUID%%-*}"
 ACTIVE_STARTED_EPOCH=""
 ACTIVE_DURATION=""
 PROGRESS_MESSAGE=""
+TIMED_POSITION=""
+TIMED_TOTAL=""
+TIMED_REMAINING=""
+completed_count=""
+pending_count=""
 
 export HOME="${HOME:-/data/data/com.termux/files/home}"
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:${PATH:-}"
@@ -166,6 +172,14 @@ if [[ -n "$ACTIVE_STARTED_EPOCH" ]]; then
   ACTIVE_DURATION="$(format_duration "$ACTIVE_STARTED_EPOCH" 2>/dev/null || true)"
 fi
 
+if [[ "$NAUTICAL_PROGRESS_ENABLED" == "1" ]]; then
+  timed_output="$(PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m taskwarrior_tnt.nautical_progress "$TASK_BIN" "$TASK_UUID" 2>/dev/null || true)"
+  if [[ -n "$timed_output" ]]; then
+    IFS='|' read -r TIMED_POSITION TIMED_TOTAL TIMED_REMAINING <<< "$timed_output"
+  fi
+fi
+
 if [[ "$JOT_TIMELOG_ENABLED" == "1" ]]; then
   if [[ -z "$ACTIVE_STARTED_EPOCH" ]]; then
     JOT_STATUS="skipped"
@@ -224,12 +238,19 @@ else
   log_action "WARN completion progress unavailable"
 fi
 
-if [[ "$TNT_TASK_RECURRENCE" == *"@t="* &&
-      "$TNT_TASK_LINK" =~ ^[0-9]+$ && "$TNT_TASK_CHAIN_MAX" =~ ^[0-9]+$ &&
-      "$TNT_TASK_CHAIN_MAX" -ge "$TNT_TASK_LINK" ]]; then
-  nautical_remaining=$((TNT_TASK_CHAIN_MAX - TNT_TASK_LINK))
-  PROGRESS_MESSAGE="Task $TNT_TASK_LINK out of $TNT_TASK_CHAIN_MAX complete; $nautical_remaining remaining"
-  log_action "OK Nautical completion progress link=$TNT_TASK_LINK chain_max=$TNT_TASK_CHAIN_MAX remaining=$nautical_remaining"
+if [[ "$TIMED_POSITION" =~ ^[0-9]+$ && "$TIMED_TOTAL" =~ ^[0-9]+$ &&
+      "$TIMED_REMAINING" =~ ^[0-9]+$ ]]; then
+  if [[ "$completed_count" =~ ^[0-9]+$ && "$pending_count" =~ ^[0-9]+$ ]]; then
+    adjusted_pending=$((pending_count + TIMED_REMAINING))
+    adjusted_total=$((completed_count + adjusted_pending))
+    PROGRESS_MESSAGE="Task $completed_count out of $adjusted_total complete; $adjusted_pending remaining"
+  fi
+  if [[ -n "$PROGRESS_MESSAGE" ]]; then
+    PROGRESS_MESSAGE="$PROGRESS_MESSAGE; occurrence $TIMED_POSITION of $TIMED_TOTAL today"
+  else
+    PROGRESS_MESSAGE="Occurrence $TIMED_POSITION of $TIMED_TOTAL today; $TIMED_REMAINING later"
+  fi
+  log_action "OK Nautical daily progress position=$TIMED_POSITION total=$TIMED_TOTAL remaining=$TIMED_REMAINING"
 fi
 
 if command -v termux-toast >/dev/null 2>&1; then
