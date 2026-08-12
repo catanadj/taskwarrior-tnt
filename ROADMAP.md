@@ -65,7 +65,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Make the GUI consume the shared reminder-building pipeline.
 - [x] Make the notifier consume the shared reminder-building pipeline.
 - [x] Normalize Taskwarrior exports through typed `TaskRecord` objects for the GUI.
-- [ ] Retire all embedded Python heredocs from shell scripts.
+- [x] Retire all embedded Python heredocs from shell scripts.
 - [x] Retire the notifier record-generation heredoc.
 - [x] Retire the legacy window-reminder heredoc.
 - [x] Retire the shared Taskwarrior snapshot-parser heredoc.
@@ -93,9 +93,9 @@ taskwarrior_tnt/
 
 ### Completion Criteria
 
-- [ ] Reminder selection has one implementation shared by notifications and the GUI.
-- [ ] Taskwarrior commands have one adapter with consistent hook, timeout, and error handling.
-- [ ] Android commands have one adapter that can be replaced by a fake during tests.
+- [x] Reminder selection has one implementation shared by notifications and the GUI.
+- [x] Taskwarrior commands have one adapter with consistent hook, timeout, and error handling.
+- [x] Android commands have one adapter that can be replaced by a fake during tests.
 - [ ] Shell remains only where Termux:Tasker requires executable wrappers.
 
 ## Phase 3: Introduce A Unified CLI
@@ -127,10 +127,10 @@ taskwarrior_tnt/
 - [x] Add `tnt config migrate` with backup creation.
 - [ ] Replace tab-separated state files with versioned JSON state.
 - [x] Add versioned JSON state migration while retaining legacy files.
-- [ ] Add atomic state writes and explicit schema migration.
+- [x] Add atomic state writes and explicit schema migration.
 - [x] Add configurable command timeouts.
 - [ ] Add bounded log rotation.
-- [ ] Quote notification action commands safely when paths contain spaces or shell characters.
+- [x] Quote notification action commands safely when paths contain spaces or shell characters.
 - [x] Document which environment variables remain supported as one-off overrides.
 
 ### Completion Criteria

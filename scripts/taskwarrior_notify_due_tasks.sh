@@ -590,13 +590,13 @@ post_notification_record() {
     channel_args=(--channel "$notification_channel")
   fi
 
-  complete_action="$COMPLETE_SCRIPT $uuid $notification_id"
-  delete_action="$FORGET_SCRIPT $notification_id"
-  snooze_hour_action="$SNOOZE_SCRIPT $uuid $notification_id 1h"
-  snooze_tomorrow_action="$SNOOZE_SCRIPT $uuid $notification_id tomorrow"
+  printf -v complete_action '%q %q %q' "$COMPLETE_SCRIPT" "$uuid" "$notification_id"
+  printf -v delete_action '%q %q' "$FORGET_SCRIPT" "$notification_id"
+  printf -v snooze_hour_action '%q %q %q %q' "$SNOOZE_SCRIPT" "$uuid" "$notification_id" "1h"
+  printf -v snooze_tomorrow_action '%q %q %q %q' "$SNOOZE_SCRIPT" "$uuid" "$notification_id" "tomorrow"
   if [[ "$START_STOP_ACTION_ENABLED" == "1" ]]; then
     button1_text="$task_button"
-    button1_action="$START_STOP_SCRIPT $task_action $uuid $notification_id"
+    printf -v button1_action '%q %q %q %q' "$START_STOP_SCRIPT" "$task_action" "$uuid" "$notification_id"
   else
     button1_text="Snooze 1h"
     button1_action="$snooze_hour_action"
