@@ -39,6 +39,7 @@ from taskwarrior_tnt.state import (
     remove_snooze,
     upsert_snooze,
     write_manifest,
+    state_lock,
 )
 from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
@@ -502,6 +503,13 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual({"uuid-b": 400}, read_snoozes(snoozes, 200))
         remove_snooze(snoozes, "uuid-b")
         self.assertEqual({"uuid-a": 200}, read_snoozes(snoozes, 0))
+
+    def test_shared_state_lock_is_released_and_reusable(self) -> None:
+        with state_lock(self.state_dir):
+            self.assertTrue((self.state_dir / ".state.lock").is_dir())
+        self.assertFalse((self.state_dir / ".state.lock").exists())
+        with state_lock(self.state_dir):
+            self.assertTrue((self.state_dir / ".state.lock").is_dir())
 
     def test_android_adapter_builds_termux_api_commands(self) -> None:
         android = Android(

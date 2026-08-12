@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,6 +83,40 @@ def remove_snooze(path: str | Path, uuid: str) -> None:
     snoozes = read_snoozes(path, 0)
     snoozes.pop(uuid, None)
     write_snoozes(path, snoozes)
+
+
+@contextmanager
+def state_lock(state_dir: str | Path, timeout: float = 10.0, stale_after: float = 60.0):
+    """Acquire the same mkdir-based lock convention used by shell clients."""
+    directory = Path(state_dir)
+    lock_dir = directory / ".state.lock"
+    directory.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            lock_dir.mkdir()
+            (lock_dir / "pid").write_text(str(os.getpid()))
+            (lock_dir / "epoch").write_text(str(int(time.time())))
+            break
+        except FileExistsError:
+            try:
+                epoch = int((lock_dir / "epoch").read_text())
+            except (OSError, ValueError):
+                epoch = int(time.time())
+            if time.time() - epoch > stale_after:
+                for child in lock_dir.iterdir():
+                    child.unlink(missing_ok=True)
+                lock_dir.rmdir()
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError("timed out waiting for Taskwarrior TNT state lock")
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        for child in lock_dir.iterdir():
+            child.unlink(missing_ok=True)
+        lock_dir.rmdir()
 
 
 def _atomic_write(path: Path, content: str) -> None:
