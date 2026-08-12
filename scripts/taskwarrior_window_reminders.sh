@@ -48,6 +48,8 @@ WINDOW_FUTURE_HOURS="${TW_WINDOW_FUTURE_HOURS:-2}"
 MAX_TASKS="${TW_MAX_TASKS:-12}"
 TASK_BIN="${TASK_BIN:-task}"
 export TASK_BIN
+SCRIPT_DIR="$(dirname "$0")"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 if ! command -v "$TASK_BIN" >/dev/null 2>&1; then
   echo "ERROR: task command not found. Install Taskwarrior in Termux first."
@@ -62,67 +64,15 @@ fi
 python3 - "$WINDOW_PAST_HOURS" "$WINDOW_FUTURE_HOURS" "$MAX_TASKS" <<'PY'
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
-
-
-def parse_task_date(value):
-    if not value:
-        return None
-    for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
-        try:
-            parsed = datetime.strptime(value, fmt)
-            if value.endswith("Z"):
-                return parsed.replace(tzinfo=timezone.utc).astimezone()
-            return parsed.astimezone()
-        except ValueError:
-            pass
-    return None
-
-
-def clean_text(value):
-    return " ".join(str(value or "").split())
-
-
-def parse_iso_duration(value):
-    if not value:
-        return None
-    match = re.fullmatch(
-        r"P(?:(?P<days>\d+(?:\.\d+)?)D)?"
-        r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
-        r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
-        r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?",
-        str(value).strip(),
-    )
-    if not match:
-        return None
-
-    values = {key: float(value or 0) for key, value in match.groupdict().items()}
-    duration = timedelta(
-        days=values["days"],
-        hours=values["hours"],
-        minutes=values["minutes"],
-        seconds=values["seconds"],
-    )
-    return duration if duration.total_seconds() > 0 else None
-
-
-def format_delta(delta):
-    total_seconds = int(abs(delta.total_seconds()))
-    minutes = max(1, (total_seconds + 59) // 60)
-    hours, remaining_minutes = divmod(minutes, 60)
-    days, remaining_hours = divmod(hours, 24)
-
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if remaining_hours:
-        parts.append(f"{remaining_hours}h")
-    if remaining_minutes and not days:
-        parts.append(f"{remaining_minutes}m")
-    return " ".join(parts) if parts else "0m"
+from taskwarrior_tnt.formatting import (
+    clean_text,
+    format_delta,
+    parse_iso_duration,
+    parse_task_date,
+)
 
 
 try:

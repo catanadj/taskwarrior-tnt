@@ -54,7 +54,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Create a `taskwarrior_tnt/` Python package.
 - [ ] Add typed domain models for tasks, reminders, actions, and notification state.
 - [ ] Move Taskwarrior export and mutation commands into `taskwarrior.py`.
-- [x] Move date, duration, and delta formatting into `formatting.py` for the GUI client.
+- [x] Move date, duration, and delta formatting into `formatting.py` for the Python clients.
 - [ ] Move window filtering, bucketing, sorting, and limits into `policy.py`.
 - [ ] Move notification manifest, snooze state, and locking into `state.py`.
 - [ ] Move Android notification, channel, removal, and toast calls into `android.py`.
@@ -62,7 +62,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [ ] Isolate Jot support behind an integration interface.
 - [ ] Make the notifier and GUI consume the same task-selection and formatting code.
 - [ ] Retire embedded Python heredocs from shell scripts.
-- [ ] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
+- [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
 - [ ] Preserve current behavior through characterization tests during extraction.
 
 ### Proposed Package Layout
