@@ -167,7 +167,7 @@ taskwarrior_tnt/
 ### Health And Refresh
 
 - [ ] Record the last successful scan, duration, task counts, and last error.
-- [ ] Make `tnt status` show the next eligible reminder and current channel state.
+- [x] Make `tnt status` show the next eligible reminder and current channel state.
 - [ ] Add a health notification after repeated scan failures without spamming every cycle.
 - [ ] Add an optional recovery message when scans begin succeeding again.
 - [ ] Provide a stable post-sync refresh command.

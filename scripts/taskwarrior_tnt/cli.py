@@ -6,10 +6,15 @@ import argparse
 import os
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 from taskwarrior_tnt.config import migrate_to_toml, read_config, validate
+from taskwarrior_tnt.policy import filter_tasks
+from taskwarrior_tnt.reminders import build_reminders
 from taskwarrior_tnt.state import migrate_to_json, read_manifest, read_snoozes
+from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending, normalize_tasks
 
 VERSION = "0.2.0"
 
@@ -58,12 +63,53 @@ def main(argv: list[str] | None = None) -> int:
         return run_script("taskwarrior_gui.sh")
     if args.command == "status":
         state_dir = Path(os.environ.get("TW_STATE_DIR", "~/.local/state/taskwarrior-tnt")).expanduser()
-        now_epoch = int(__import__("time").time())
+        now_epoch = int(time.time())
         print(f"version={VERSION}")
         print(f"state_dir={state_dir}")
         print(f"active_notifications={len(read_manifest(state_dir / 'active-notifications'))}")
         print(f"snoozed_tasks={len(read_snoozes(state_dir / 'snoozed-tasks', now_epoch))}")
-        print(f"channels_cached={'yes' if (state_dir / 'notification-channels').exists() else 'no'}")
+        channel_state = state_dir / "notification-channels"
+        print(f"channels_cached={'yes' if channel_state.exists() else 'no'}")
+        values: dict[str, str]
+        try:
+            values = read_config()
+        except ValueError:
+            values = {}
+        try:
+            now = datetime.now().astimezone()
+            tasks = normalize_tasks(
+                export_pending(
+                    values.get("TASK_BIN", "task"),
+                    now,
+                    float(values.get("TW_WINDOW_FUTURE_HOURS", "2")),
+                    task_filter=values.get("TW_TASK_FILTER", ""),
+                    timeout_seconds=float(values.get("TW_COMMAND_TIMEOUT_SECONDS", "30")),
+                )
+            )
+            tasks = filter_tasks(
+                tasks,
+                include_projects=values.get("TW_INCLUDE_PROJECTS", ""),
+                exclude_projects=values.get("TW_EXCLUDE_PROJECTS", ""),
+                include_tags=values.get("TW_INCLUDE_TAGS", ""),
+                exclude_tags=values.get("TW_EXCLUDE_TAGS", ""),
+                opt_out_tag=values.get("TW_OPTOUT_TAG", ""),
+            )
+            reminders = build_reminders(
+                tasks,
+                now,
+                float(values.get("TW_WINDOW_PAST_HOURS", "2")),
+                float(values.get("TW_WINDOW_FUTURE_HOURS", "2")),
+                int(values.get("TW_MAX_TASKS", "12")),
+                set(read_snoozes(state_dir / "snoozed-tasks", now_epoch)),
+                values.get("TW_ALWAYS_SHOW_ACTIVE", "0") == "1",
+            )
+            if reminders:
+                print(f"next_reminder={reminders[0].title}")
+                print(f"next_bucket={reminders[0].bucket}")
+            else:
+                print("next_reminder=none")
+        except (TaskwarriorCommandError, ValueError, OSError) as exc:
+            print(f"next_reminder=unavailable ({exc})")
         return 0
     if args.command == "config":
         if args.action == "migrate":
