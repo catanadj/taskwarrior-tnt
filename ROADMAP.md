@@ -100,13 +100,13 @@ taskwarrior_tnt/
 
 ## Phase 3: Introduce A Unified CLI
 
-- [ ] Add a `tnt` command with stable subcommands.
-- [ ] Implement `tnt scan`.
-- [ ] Implement `tnt action start|stop|done|snooze`.
-- [ ] Implement `tnt channels setup`.
-- [ ] Implement `tnt doctor`.
-- [ ] Implement `tnt status`.
-- [ ] Implement `tnt gui`.
+- [x] Add a `tnt` command with stable subcommands.
+- [x] Implement `tnt scan`.
+- [x] Implement `tnt action start|stop|done|snooze`.
+- [x] Implement `tnt channels setup`.
+- [x] Implement `tnt doctor`.
+- [x] Implement `tnt status`.
+- [x] Implement `tnt gui`.
 - [ ] Turn existing Tasker scripts into thin compatibility wrappers.
 - [ ] Keep existing script names and arguments working for at least one migration release.
 - [ ] Add `tnt --version` and include the version in doctor output.

@@ -20,6 +20,7 @@ required_files=(
   taskwarrior_start_stop_task.sh
   taskwarrior_gui.sh
   taskwarrior_gui.py
+  tnt
 )
 
 required_python_package_files=(
@@ -37,6 +38,7 @@ required_python_package_files=(
   taskwarrior_tnt/legacy_window.py
   taskwarrior_tnt/snooze.py
   taskwarrior_tnt/quiet_hours.py
+  taskwarrior_tnt/cli.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
