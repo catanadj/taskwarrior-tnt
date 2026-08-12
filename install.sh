@@ -44,6 +44,48 @@ required_python_package_files=(
   taskwarrior_tnt/prescan.py
 )
 
+merge_missing_config_options() {
+  local defaults_file="$1"
+  local target_file="$2"
+  local line key temporary_file
+  local -a missing_lines=()
+  local -A existing_keys=()
+  local -A default_keys=()
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*= ]]; then
+      existing_keys["${BASH_REMATCH[1]}"]=1
+    fi
+  done < "$target_file"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -z "${existing_keys[$key]:-}" && -z "${default_keys[$key]:-}" ]]; then
+        missing_lines+=("$line")
+        default_keys["$key"]=1
+      fi
+    fi
+  done < "$defaults_file"
+
+  if (( ${#missing_lines[@]} == 0 )); then
+    return 0
+  fi
+
+  cp -p "$target_file" "$target_file.bak"
+  chmod 600 "$target_file.bak"
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")"
+  cp "$target_file" "$temporary_file"
+  {
+    printf '\n# Added by Taskwarrior TNT upgrade; existing values were preserved.\n'
+    printf '%s\n' "${missing_lines[@]}"
+  } >> "$temporary_file"
+  chmod 600 "$temporary_file"
+  mv "$temporary_file" "$target_file"
+  echo "Added ${#missing_lines[@]} missing config option(s): $target_file"
+  echo "Backed up previous config: $target_file.bak"
+}
+
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
   echo "ERROR: scripts directory not found: $SOURCE_DIR/scripts"
   exit 2
@@ -77,6 +119,7 @@ if [[ "$FORCE_CONFIG" == "1" || ! -f "$CONFIG_FILE" ]]; then
 else
   cp "$CONFIG_EXAMPLE" "$CONFIG_FILE.example"
   chmod 600 "$CONFIG_FILE.example"
+  merge_missing_config_options "$CONFIG_EXAMPLE" "$CONFIG_FILE"
   echo "Kept existing config: $CONFIG_FILE"
   echo "Wrote latest example: $CONFIG_FILE.example"
 fi

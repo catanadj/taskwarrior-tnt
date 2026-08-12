@@ -703,13 +703,26 @@ class SchedulerService:
         )
         self.assertEqual(0, first.returncode, first.stderr)
         config = install_dir / "taskwarrior_tasker.conf"
-        config.write_text("TW_MAX_TASKS=3\n")
+        original = "# Local choices\nTW_MAX_TASKS=3\nTW_SYNC_TIMEOUT_SECONDS=42\n"
+        config.write_text(original)
         second = subprocess.run(
             ["bash", str(ROOT / "install.sh")], env=env, capture_output=True, text=True
         )
         self.assertEqual(0, second.returncode, second.stderr)
-        self.assertEqual("TW_MAX_TASKS=3\n", config.read_text())
+        merged = config.read_text()
+        self.assertTrue(merged.startswith(original))
+        self.assertIn("TW_SYNC_BEFORE_SCAN_ENABLED=0", merged)
+        self.assertIn('TW_SYNC_SCRIPT=""', merged)
+        self.assertEqual(1, merged.count("TW_MAX_TASKS="))
+        self.assertEqual(1, merged.count("TW_SYNC_TIMEOUT_SECONDS="))
+        self.assertEqual(original, config.with_suffix(".conf.bak").read_text())
         self.assertTrue(config.with_name("taskwarrior_tasker.conf.example").exists())
+
+        third = subprocess.run(
+            ["bash", str(ROOT / "install.sh")], env=env, capture_output=True, text=True
+        )
+        self.assertEqual(0, third.returncode, third.stderr)
+        self.assertEqual(merged, config.read_text())
 
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"

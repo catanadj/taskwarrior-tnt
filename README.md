@@ -33,7 +33,10 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer copies scripts to `~/.termux/tasker`, preserves your existing config, writes the latest config as `taskwarrior_tasker.conf.example`, sets permissions, and runs basic checks.
+The installer copies scripts to `~/.termux/tasker`, preserves existing config
+values, appends any newly introduced options with their defaults, writes a
+pre-merge `.bak`, and writes the complete latest config as
+`taskwarrior_tasker.conf.example`. Repeated upgrades do not duplicate options.
 
 Useful tests:
 
