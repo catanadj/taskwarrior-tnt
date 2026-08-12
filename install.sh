@@ -39,6 +39,7 @@ required_python_package_files=(
   taskwarrior_tnt/snooze.py
   taskwarrior_tnt/quiet_hours.py
   taskwarrior_tnt/cli.py
+  taskwarrior_tnt/config.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then

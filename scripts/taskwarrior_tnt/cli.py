@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from taskwarrior_tnt.config import read_config, validate
+
 
 def scripts_dir() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -33,6 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     action.add_argument("snooze_value", nargs="?")
     sub.add_parser("gui", help="open the Termux:GUI dashboard")
     sub.add_parser("status", help="show notification state")
+    config = sub.add_parser("config", help="validate configuration")
+    config.add_argument("action", choices=("check",))
     return parser
 
 
@@ -48,6 +52,18 @@ def main(argv: list[str] | None = None) -> int:
         return run_script("taskwarrior_gui.sh")
     if args.command == "status":
         return run_script("taskwarrior_notify_due_tasks.sh", "--doctor")
+    if args.command == "config":
+        try:
+            errors = validate(read_config())
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}", file=sys.stderr)
+            return 2
+        print("Configuration is valid.")
+        return 0
     script = {
         "start": "taskwarrior_start_stop_task.sh",
         "stop": "taskwarrior_start_stop_task.sh",

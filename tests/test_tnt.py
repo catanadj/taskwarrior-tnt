@@ -45,6 +45,7 @@ from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
 from taskwarrior_tnt.integrations import IntegrationStatus, JotIntegration
 from taskwarrior_tnt.reminders import build_reminders
+from taskwarrior_tnt.config import validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -485,6 +486,12 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         )
         self.assertIn("13:20 - 13:30", reminders[1].title)
         self.assertIn("SOON", reminders[1].content)
+
+    def test_configuration_validation_accepts_defaults_and_rejects_invalid_values(self) -> None:
+        self.assertEqual([], validate({}))
+        errors = validate({"TW_MAX_TASKS": "0", "TW_QUIET_HOURS_START": "25:00"})
+        self.assertIn("TW_MAX_TASKS must be at least 1", errors)
+        self.assertIn("TW_QUIET_HOURS_START must use HH:MM", errors)
 
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"

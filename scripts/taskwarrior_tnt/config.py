@@ -1,0 +1,65 @@
+"""Validation for the existing shell configuration format."""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+from pathlib import Path
+
+
+def read_config(path: str | None = None) -> dict[str, str]:
+    config_path = path or os.environ.get(
+        "TW_CONFIG_FILE", os.path.expanduser("~/.termux/tasker/taskwarrior_tasker.conf")
+    )
+    result = subprocess.run(
+        ["bash", "-c", 'set -a; source "$1"; env', "tnt-config", config_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError(result.stderr.strip() or "could not source configuration")
+    values: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.startswith("TW_") or key in {"TASK_BIN", "JOT_BIN"}:
+            values[key] = value
+    return values
+
+
+def validate(values: dict[str, str]) -> list[str]:
+    errors: list[str] = []
+    for key in ("TW_WINDOW_PAST_HOURS", "TW_WINDOW_FUTURE_HOURS"):
+        try:
+            if float(values.get(key, "2")) < 0:
+                errors.append(f"{key} must be non-negative")
+        except ValueError:
+            errors.append(f"{key} must be numeric")
+    try:
+        if int(values.get("TW_MAX_TASKS", "12")) < 1:
+            errors.append("TW_MAX_TASKS must be at least 1")
+    except ValueError:
+        errors.append("TW_MAX_TASKS must be an integer")
+    time_pattern = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    for key in ("TW_QUIET_HOURS_START", "TW_QUIET_HOURS_END"):
+        if not time_pattern.match(values.get(key, "22:00" if key.endswith("START") else "07:00")):
+            errors.append(f"{key} must use HH:MM")
+    if values.get("TW_SNOOZE_1H_MODE", "local") not in {"local", "modify_due"}:
+        errors.append("TW_SNOOZE_1H_MODE must be local or modify_due")
+    if values.get("TW_SNOOZE_TOMORROW_MODE", "modify_due") not in {"local", "modify_due"}:
+        errors.append("TW_SNOOZE_TOMORROW_MODE must be local or modify_due")
+    if values.get("TW_NOTIFICATION_CHANNELS_ENABLED", "1") == "1":
+        for key in (
+            "TW_EXECUTION_NOTIFICATION_CHANNEL",
+            "TW_OVERDUE_NOTIFICATION_CHANNEL",
+            "TW_STARTED_NOTIFICATION_CHANNEL",
+        ):
+            default = {
+                "TW_EXECUTION_NOTIFICATION_CHANNEL": "taskwarrior-tnt-window",
+                "TW_OVERDUE_NOTIFICATION_CHANNEL": "taskwarrior-tnt-overdue",
+                "TW_STARTED_NOTIFICATION_CHANNEL": "taskwarrior-tnt-active",
+            }[key]
+            if not values.get(key, default):
+                errors.append(f"{key} must not be empty when channels are enabled")
+    return errors

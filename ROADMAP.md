@@ -119,10 +119,10 @@ taskwarrior_tnt/
 
 ## Phase 4: Modernize Configuration And State
 
-- [ ] Define a validated configuration schema.
+- [x] Add validation for the existing shell configuration schema.
 - [ ] Add a versioned TOML configuration file.
 - [ ] Support importing the existing shell configuration.
-- [ ] Add `tnt config check` with actionable validation errors.
+- [x] Add `tnt config check` with actionable validation errors.
 - [ ] Add `tnt config migrate` with backup creation.
 - [ ] Replace tab-separated state files with versioned JSON state.
 - [ ] Add atomic state writes and explicit schema migration.
