@@ -520,6 +520,7 @@ from taskwarrior_tnt.formatting import (
     parse_iso_duration,
     parse_task_date,
 )
+from taskwarrior_tnt.policy import reminder_bucket, select_priority
 
 
 def notification_id(uuid, bucket):
@@ -615,19 +616,18 @@ except json.JSONDecodeError as exc:
     print(f"ERROR\ttask export did not return valid JSON: {exc}")
     sys.exit(2)
 
-start = now - timedelta(hours=past_hours)
-end = now + timedelta(hours=future_hours)
-today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 matches = []
 for task in tasks:
     uuid = clean_text(task.get("uuid"))
     due = parse_task_date(task.get("due"))
-    if not uuid or due is None or due < today_start or due > end:
+    if not uuid or due is None:
         continue
     if uuid in snoozed_until_by_uuid:
         continue
-    bucket = "overdue" if due < start else "window"
+    bucket = reminder_bucket(due, now, past_hours, future_hours)
+    if bucket is None:
+        continue
 
     urgency = float(task.get("urgency") or 0)
     description = clean_text(task.get("description"))
@@ -675,15 +675,14 @@ for task in tasks:
     started_value = "1" if is_started else "0"
     matches.append((bucket, due, -urgency, notification_id(uuid, bucket), uuid, title, content, task_action, task_button, started_value))
 
-matches.sort(key=lambda item: (item[1], item[2]))
-active_matches = [item for item in matches if item[9] == "1"]
-window_matches = [item for item in matches if item[0] == "window" and item[9] != "1"]
-overdue_matches = [item for item in matches if item[0] == "overdue" and item[9] != "1"]
-
-# Active tasks and the execution window take precedence over overdue backlog.
-priority_matches = active_matches + window_matches + overdue_matches
-selected_uuids = {item[4] for item in priority_matches[:max_tasks]}
-selected_matches = [item for item in matches if item[4] in selected_uuids]
+selected_matches = select_priority(
+    matches,
+    max_tasks,
+    due_key=lambda item: item[1],
+    urgency_key=lambda item: -item[2],
+    bucket_key=lambda item: item[0],
+    active_key=lambda item: item[9] == "1",
+)
 
 cache_rows = []
 for bucket, due, urgency_sort, notif_id, uuid, title, content, task_action, task_button, started_value in selected_matches:

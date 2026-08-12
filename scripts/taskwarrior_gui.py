@@ -18,6 +18,7 @@ from taskwarrior_tnt.formatting import (
     parse_iso_duration,
     parse_task_date,
 )
+from taskwarrior_tnt.policy import reminder_bucket, select_priority
 
 try:
     import termuxgui as tg
@@ -270,19 +271,18 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
     except json.JSONDecodeError as exc:
         return [], f"task export did not return JSON: {exc}"
 
-    start = now - timedelta(hours=config.past_hours)
-    end = now + timedelta(hours=config.future_hours)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     snoozed = read_snoozed(config.state_dir)
 
     rows: list[TaskRow] = []
     for task in tasks:
         uuid = clean_text(task.get("uuid"))
         due = parse_task_date(task.get("due"))
-        if not uuid or not due or due < today_start or due > end or uuid in snoozed:
+        if not uuid or not due or uuid in snoozed:
             continue
 
-        bucket = "overdue" if due < start else "window"
+        bucket = reminder_bucket(due, now, config.past_hours, config.future_hours)
+        if bucket is None:
+            continue
         description = clean_text(task.get("description")) or uuid[:8]
         project = clean_text(task.get("project"))
         tags = task.get("tags") or []
@@ -336,19 +336,14 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
             )
         )
 
-    rows.sort(key=lambda row: (row.due, -row.urgency))
-    active_rows = [row for row in rows if row.action == "stop"]
-    window_rows = [
-        row for row in rows if row.bucket == "window" and row.action != "stop"
-    ]
-    overdue_rows = [
-        row for row in rows if row.bucket == "overdue" and row.action != "stop"
-    ]
-    selected = {
-        row.uuid
-        for row in (active_rows + window_rows + overdue_rows)[: config.max_tasks]
-    }
-    rows = [row for row in rows if row.uuid in selected]
+    rows = select_priority(
+        rows,
+        config.max_tasks,
+        due_key=lambda row: row.due,
+        urgency_key=lambda row: row.urgency,
+        bucket_key=lambda row: row.bucket,
+        active_key=lambda row: row.action == "stop",
+    )
     write_task_cache(config, rows)
     return rows, ""
 

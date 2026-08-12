@@ -55,7 +55,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [ ] Add typed domain models for tasks, reminders, actions, and notification state.
 - [ ] Move Taskwarrior export and mutation commands into `taskwarrior.py`.
 - [x] Move date, duration, and delta formatting into `formatting.py` for the Python clients.
-- [ ] Move window filtering, bucketing, sorting, and limits into `policy.py`.
+- [x] Move window filtering, bucketing, sorting, and limits into `policy.py` for the GUI and notifier.
 - [ ] Move notification manifest, snooze state, and locking into `state.py`.
 - [ ] Move Android notification, channel, removal, and toast calls into `android.py`.
 - [ ] Move Start, Stop, Done, and Snooze behavior into `actions.py`.

@@ -22,6 +22,7 @@ from taskwarrior_tnt.formatting import (
     parse_iso_duration,
     parse_task_date,
 )
+from taskwarrior_tnt.policy import reminder_bucket, select_priority
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -365,6 +366,25 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertIsNone(parse_iso_duration("invalid"))
         self.assertEqual("1h 5m", format_delta(timedelta(hours=1, minutes=5)))
         self.assertIsNotNone(parse_task_date("20260812T130000Z"))
+
+    def test_shared_policy_assigns_buckets_and_priority(self) -> None:
+        now = FIXED_NOW
+        records = [
+            {"name": "overdue", "due": now - timedelta(hours=3), "urgency": 9},
+            {"name": "window", "due": now + timedelta(minutes=30), "urgency": 1},
+            {"name": "active", "due": now - timedelta(minutes=30), "urgency": 1},
+        ]
+        self.assertEqual("overdue", reminder_bucket(records[0]["due"], now, 2, 2))
+        self.assertEqual("window", reminder_bucket(records[1]["due"], now, 2, 2))
+        selected = select_priority(
+            records,
+            2,
+            due_key=lambda record: record["due"],
+            urgency_key=lambda record: record["urgency"],
+            bucket_key=lambda record: "window" if record["name"] != "overdue" else "overdue",
+            active_key=lambda record: record["name"] == "active",
+        )
+        self.assertEqual(["active", "window"], [record["name"] for record in selected])
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"
