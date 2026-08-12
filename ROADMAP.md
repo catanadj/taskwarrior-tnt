@@ -176,7 +176,7 @@ taskwarrior_tnt/
 ## Phase 6: Make The GUI A Control Center
 
 - [ ] Remove duplicated selection and formatting logic by consuming the shared core.
-- [ ] Present separate Active, Now, Soon, and Overdue sections.
+- [x] Present separate Active, Now, Soon, and Overdue sections.
 - [ ] Add project and tag filtering.
 - [ ] Add task details without turning each row into a wall of text.
 - [ ] Keep actions contextual to the selected task.

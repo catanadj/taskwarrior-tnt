@@ -311,6 +311,14 @@ def task_marker(task: TaskRow) -> str:
     return "-"
 
 
+def task_section(task: TaskRow) -> str:
+    if task.action == "stop":
+        return "Active"
+    if task.bucket == "overdue":
+        return "Overdue"
+    return "Soon" if task.content.startswith("SOON |") else "Now"
+
+
 def clip_text(value: str, max_length: int = 96) -> str:
     return value if len(value) <= max_length else f"{value[: max_length - 3]}..."
 
@@ -354,12 +362,15 @@ def main() -> None:
         row_titles: dict[str, tuple[Any, str]] = {}
         selected_task: TaskRow | None = None
 
-        overdue = [task for task in tasks if task.bucket == "overdue"]
-        window = [task for task in tasks if task.bucket == "window"]
+        sections = {
+            name: [task for task in tasks if task_section(task) == name]
+            for name in ("Active", "Overdue", "Now", "Soon")
+        }
 
         title = tg.TextView(
             activity,
-            f"Taskwarrior TNT | {len(overdue)} overdue | {len(window)} window",
+            "Taskwarrior TNT | "
+            + " | ".join(f"{name} {len(items)}" for name, items in sections.items()),
             root,
         )
         title.settextsize(24)
@@ -427,23 +438,15 @@ def main() -> None:
                 return [config.snooze_script, selected_task.uuid, "", "1h"]
             return None
 
-        add_header(tg, activity, root, f"Today Overdue ({len(overdue)})")
-        if overdue:
-            for task in overdue:
-                add_task(tg, activity, root, task, task_clicks, row_titles)
-        else:
-            empty = tg.TextView(activity, "None", root)
-            empty.setheight(tg.View.WRAP_CONTENT)
-            empty.setlinearlayoutparams(0)
-
-        add_header(tg, activity, root, f"Execution Window ({len(window)})")
-        if window:
-            for task in window:
-                add_task(tg, activity, root, task, task_clicks, row_titles)
-        else:
-            empty = tg.TextView(activity, "None", root)
-            empty.setheight(tg.View.WRAP_CONTENT)
-            empty.setlinearlayoutparams(0)
+        for section_name, section_tasks in sections.items():
+            add_header(tg, activity, root, f"{section_name} ({len(section_tasks)})")
+            if section_tasks:
+                for task in section_tasks:
+                    add_task(tg, activity, root, task, task_clicks, row_titles)
+            else:
+                empty = tg.TextView(activity, "None", root)
+                empty.setheight(tg.View.WRAP_CONTENT)
+                empty.setlinearlayoutparams(0)
 
         if tasks:
             select_task(tasks[0])
