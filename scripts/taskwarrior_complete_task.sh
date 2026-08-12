@@ -58,6 +58,7 @@ JOT_STATUS="off"
 TASK_SHORT_ID="${TASK_UUID%%-*}"
 ACTIVE_STARTED_EPOCH=""
 ACTIVE_DURATION=""
+PROGRESS_MESSAGE=""
 
 export HOME="${HOME:-/data/data/com.termux/files/home}"
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:${PATH:-}"
@@ -207,8 +208,27 @@ fi
 
 clear_task_reminder
 
+count_tasks() {
+  local status_filter="$1"
+  local count
+  count="$($TASK_BIN rc.hooks:off rc.verbose:nothing "status:$status_filter" count 2>/dev/null | tr -d '[:space:]')" || return 1
+  [[ "$count" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$count"
+}
+
+if completed_count="$(count_tasks completed)" && pending_count="$(count_tasks pending)"; then
+  total_count=$((completed_count + pending_count))
+  PROGRESS_MESSAGE="Task $completed_count out of $total_count complete; $pending_count remaining"
+  log_action "OK completion progress completed=$completed_count total=$total_count pending=$pending_count"
+else
+  log_action "WARN completion progress unavailable"
+fi
+
 if command -v termux-toast >/dev/null 2>&1; then
   toast_message="$TASK_SHORT_ID completed"
+  if [[ -n "$PROGRESS_MESSAGE" ]]; then
+    toast_message="$PROGRESS_MESSAGE"
+  fi
   if [[ -n "$ACTIVE_DURATION" ]]; then
     toast_message="$toast_message; active $ACTIVE_DURATION"
   fi

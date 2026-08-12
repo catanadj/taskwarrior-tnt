@@ -106,6 +106,13 @@ if "export" in sys.argv:
     print(json.dumps(data))
     raise SystemExit(0)
 
+if "count" in sys.argv:
+    if "status:completed" in sys.argv:
+        print(os.environ.get("TNT_TEST_COMPLETED_COUNT", "0"))
+    else:
+        print(os.environ.get("TNT_TEST_PENDING_COUNT", "0"))
+    raise SystemExit(0)
+
 with open(os.environ["TNT_TEST_CALLS"], "a", encoding="utf-8") as handle:
     handle.write("task " + " ".join(sys.argv[1:]) + "\\n")
 if os.environ.get("TNT_TEST_ACTION_FAIL") == "1":
@@ -161,6 +168,8 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
                 "TW_WINDOW_PAST_HOURS": "2",
                 "TW_WINDOW_FUTURE_HOURS": "2",
                 "TW_MAX_TASKS": "12",
+                "TNT_TEST_COMPLETED_COUNT": "0",
+                "TNT_TEST_PENDING_COUNT": "0",
             }
         )
         env.update(overrides)
@@ -727,6 +736,20 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertFalse(any(line.startswith("task ") for line in calls))
         self.assertIn("termux-notification-remove 123456", calls)
         self.assertIn("termux-toast " + uuid[:8] + " already completed; reminder cleared", calls)
+
+    def test_completion_toast_includes_task_progress(self) -> None:
+        uuid = "3c" * 18
+        self.task(uuid, "progress task", FIXED_NOW)
+        self.run_script(
+            "taskwarrior_complete_task.sh",
+            uuid,
+            TNT_TEST_COMPLETED_COUNT="3",
+            TNT_TEST_PENDING_COUNT="17",
+        )
+        self.assertIn(
+            "termux-toast Task 3 out of 20 complete; 17 remaining",
+            "\n".join(self.calls()),
+        )
 
     def test_start_and_stop_are_idempotent(self) -> None:
         uuid = "eeeeeeee-0000-0000-0000-000000000000"
