@@ -8,6 +8,9 @@ import subprocess
 from datetime import datetime, timedelta
 from typing import Mapping
 
+from taskwarrior_tnt.formatting import clean_text, parse_iso_duration, parse_task_date
+from taskwarrior_tnt.models import TaskRecord
+
 
 class TaskwarriorCommandError(RuntimeError):
     """Raised when Taskwarrior cannot produce a usable export."""
@@ -61,3 +64,31 @@ def export_pending(
     if not isinstance(payload, list):
         raise TaskwarriorCommandError("task export did not return a JSON array")
     return [item for item in payload if isinstance(item, dict)]
+
+
+def normalize_task(item: Mapping[str, object]) -> TaskRecord | None:
+    """Convert one raw Taskwarrior export object into a typed task record."""
+    uuid = clean_text(item.get("uuid"))
+    due = parse_task_date(clean_text(item.get("due")))
+    if not uuid or due is None:
+        return None
+    raw_tags = item.get("tags") or ()
+    tags = tuple(clean_text(tag) for tag in raw_tags if clean_text(tag)) if isinstance(raw_tags, (list, tuple)) else ()
+    try:
+        urgency = float(item.get("urgency") or 0)
+    except (TypeError, ValueError):
+        urgency = 0.0
+    return TaskRecord(
+        uuid=uuid,
+        due=due,
+        description=clean_text(item.get("description")),
+        project=clean_text(item.get("project")),
+        tags=tags,
+        duration=parse_iso_duration(clean_text(item.get("duration"))),
+        urgency=urgency,
+        started=bool(item.get("start")),
+    )
+
+
+def normalize_tasks(items: list[Mapping[str, object]]) -> list[TaskRecord]:
+    return [record for item in items if (record := normalize_task(item)) is not None]

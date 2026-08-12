@@ -24,7 +24,12 @@ from taskwarrior_tnt.formatting import (
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder, TaskRecord
-from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
+from taskwarrior_tnt.taskwarrior import (
+    TaskwarriorCommandError,
+    export_pending,
+    normalize_task,
+    normalize_tasks,
+)
 from taskwarrior_tnt.state import (
     ManifestEntry,
     read_manifest,
@@ -431,6 +436,26 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         )
         with self.assertRaisesRegex(TaskwarriorCommandError, "valid JSON"):
             export_pending(str(bad_task), FIXED_NOW, 2)
+
+    def test_taskwarrior_adapter_normalizes_export_records(self) -> None:
+        raw = {
+            "uuid": "17171717-0000-0000-0000-000000000000",
+            "due": "20260812T140000",
+            "description": "  normalized   task ",
+            "project": "work",
+            "tags": ["next", "focus"],
+            "duration": "PT10M",
+            "urgency": "4.5",
+            "start": "20260812T130000",
+        }
+        task = normalize_task(raw)
+        self.assertIsNotNone(task)
+        assert task is not None
+        self.assertEqual("normalized task", task.description)
+        self.assertEqual(("next", "focus"), task.tags)
+        self.assertEqual(timedelta(minutes=10), task.duration)
+        self.assertTrue(task.started)
+        self.assertEqual(1, len(normalize_tasks([raw, {"description": "missing due"}])))
 
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"

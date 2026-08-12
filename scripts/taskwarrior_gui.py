@@ -20,7 +20,11 @@ from taskwarrior_tnt.formatting import (
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder as TaskRow
-from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
+from taskwarrior_tnt.taskwarrior import (
+    TaskwarriorCommandError,
+    export_pending,
+    normalize_tasks,
+)
 from taskwarrior_tnt.state import read_snoozes
 
 try:
@@ -211,7 +215,7 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
 
     now = datetime.now().astimezone()
     try:
-        tasks = export_pending(config.task_bin, now, config.future_hours)
+        tasks = normalize_tasks(export_pending(config.task_bin, now, config.future_hours))
     except TaskwarriorCommandError as exc:
         return [], str(exc)
 
@@ -219,20 +223,20 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
 
     rows: list[TaskRow] = []
     for task in tasks:
-        uuid = clean_text(task.get("uuid"))
-        due = parse_task_date(task.get("due"))
+        uuid = task.uuid
+        due = task.due
         if not uuid or not due or uuid in snoozed:
             continue
 
         bucket = reminder_bucket(due, now, config.past_hours, config.future_hours)
         if bucket is None:
             continue
-        description = clean_text(task.get("description")) or uuid[:8]
-        project = clean_text(task.get("project"))
-        tags = task.get("tags") or []
-        duration = parse_iso_duration(task.get("duration"))
-        urgency = float(task.get("urgency") or 0)
-        is_started = bool(task.get("start"))
+        description = task.description or uuid[:8]
+        project = task.project
+        tags = task.tags
+        duration = task.duration
+        urgency = task.urgency
+        is_started = task.started
         action = "stop" if is_started else "start"
         button = "Stop" if is_started else "Start"
 
