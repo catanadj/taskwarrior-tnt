@@ -1,9 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # Shared state coordination for Taskwarrior TNT scripts.
+# shellcheck disable=SC2034
+# These variables form the sourced helper API used by caller scripts.
 
 TNT_LOCK_OWNED=0
 TNT_LOCK_DIR=""
+TNT_TASK_STATUS=""
+TNT_TASK_START_EPOCH=""
+TNT_TASK_SNAPSHOT_ERROR=""
 
 tnt_acquire_state_lock() {
   local state_dir="$1"
@@ -22,8 +27,12 @@ tnt_acquire_state_lock() {
   while ! mkdir "$TNT_LOCK_DIR" 2>/dev/null; do
     owner_pid=""
     owner_epoch=""
-    [[ -f "$TNT_LOCK_DIR/pid" ]] && IFS= read -r owner_pid < "$TNT_LOCK_DIR/pid" || true
-    [[ -f "$TNT_LOCK_DIR/epoch" ]] && IFS= read -r owner_epoch < "$TNT_LOCK_DIR/epoch" || true
+    if [[ -f "$TNT_LOCK_DIR/pid" ]]; then
+      IFS= read -r owner_pid < "$TNT_LOCK_DIR/pid" || true
+    fi
+    if [[ -f "$TNT_LOCK_DIR/epoch" ]]; then
+      IFS= read -r owner_epoch < "$TNT_LOCK_DIR/epoch" || true
+    fi
     now_epoch="$(date +%s)"
 
     if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
@@ -89,4 +98,62 @@ tnt_remove_snooze_uuid() {
     done < "$snooze_file"
   fi
   mv "$tmp_file" "$snooze_file"
+}
+
+tnt_load_task_snapshot() {
+  local task_bin="$1"
+  local task_uuid="$2"
+  local output parsed
+
+  TNT_TASK_STATUS=""
+  TNT_TASK_START_EPOCH=""
+  TNT_TASK_SNAPSHOT_ERROR=""
+
+  if ! output="$("$task_bin" rc.hooks:off rc.verbose:nothing rc.json.array:on "$task_uuid" export 2>&1)"; then
+    TNT_TASK_SNAPSHOT_ERROR="$output"
+    return 2
+  fi
+
+  if ! parsed="$(python3 - "$task_uuid" "$output" 2>&1 <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+
+uuid = sys.argv[1]
+try:
+    tasks = json.loads(sys.argv[2] or "[]")
+except json.JSONDecodeError as exc:
+    print(f"invalid Taskwarrior JSON: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+
+task = next((item for item in tasks if item.get("uuid") == uuid), None)
+if task is None:
+    print("missing\t")
+    raise SystemExit(0)
+
+status = str(task.get("status") or "unknown").replace("\t", " ").replace("\n", " ")
+start_epoch = ""
+start = task.get("start")
+if start:
+    for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
+        try:
+            value = datetime.strptime(start, fmt)
+        except ValueError:
+            continue
+        if start.endswith("Z"):
+            value = value.replace(tzinfo=timezone.utc).astimezone()
+        else:
+            value = value.astimezone()
+        start_epoch = str(int(value.timestamp()))
+        break
+
+print(f"{status}\t{start_epoch}")
+PY
+)"; then
+    TNT_TASK_SNAPSHOT_ERROR="$parsed"
+    return 2
+  fi
+
+  IFS=$'\t' read -r TNT_TASK_STATUS TNT_TASK_START_EPOCH <<< "$parsed"
+  [[ -n "$TNT_TASK_STATUS" ]] || TNT_TASK_STATUS="unknown"
 }

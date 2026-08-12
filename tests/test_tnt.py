@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""Dependency-free integration tests for Taskwarrior TNT."""
+
+from __future__ import annotations
+
+import json
+import importlib.util
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import types
+import unittest
+from datetime import datetime, timedelta
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+
+
+class TntHarness(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="taskwarrior-tnt-test-"))
+        self.bin_dir = self.temp_dir / "bin"
+        self.state_dir = self.temp_dir / "state"
+        self.bin_dir.mkdir()
+        self.calls_file = self.temp_dir / "calls.log"
+        self.task_data: list[dict[str, object]] = []
+        self.task_status = "pending"
+        self.task_started = False
+        self._write_task_command()
+        for name in (
+            "termux-notification",
+            "termux-notification-remove",
+            "termux-notification-channel",
+            "termux-toast",
+        ):
+            self._write_recording_command(name)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_executable(self, path: Path, content: str) -> None:
+        path.write_text(content)
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+    def _write_task_command(self) -> None:
+        path = self.bin_dir / "task"
+        self._write_executable(
+            path,
+            """#!/usr/bin/env python3
+import json
+import importlib.util
+import os
+import sys
+
+if "export" in sys.argv:
+    uuid = os.environ.get("TNT_TEST_UUID", "11111111-1111-1111-1111-111111111111")
+    status = os.environ.get("TNT_TEST_STATUS", "pending")
+    started = os.environ.get("TNT_TEST_STARTED", "0") == "1"
+    data = json.loads(os.environ.get("TNT_TEST_TASKS", "[]"))
+    if status != "pending":
+        data = [{"uuid": uuid, "status": status}]
+    elif started:
+        data = [{**item, "start": "20260101T120000"} for item in data]
+    print(json.dumps(data))
+    raise SystemExit(0)
+
+with open(os.environ["TNT_TEST_CALLS"], "a", encoding="utf-8") as handle:
+    handle.write("task " + " ".join(sys.argv[1:]) + "\\n")
+if os.environ.get("TNT_TEST_ACTION_FAIL") == "1":
+    print("simulated Taskwarrior action failure", file=sys.stderr)
+    raise SystemExit(7)
+""",
+        )
+
+    def _write_recording_command(self, name: str) -> None:
+        failure = ""
+        if name == "termux-notification-channel":
+            failure = (
+                'if [[ "${TNT_TEST_CHANNEL_FAIL:-0}" == "1" ]]; then\n'
+                '  echo "simulated channel failure" >&2\n'
+                '  exit 9\n'
+                'fi\n'
+            )
+        self._write_executable(
+            self.bin_dir / name,
+            f"""#!/usr/bin/env bash
+{failure}
+printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
+""",
+        )
+
+    def _env(self, **overrides: str) -> dict[str, str]:
+        task_json = json.dumps(self.task_data, separators=(",", ":"))
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{self.bin_dir}:{env.get('PATH', '')}",
+                "TNT_TEST_CALLS": str(self.calls_file),
+                "TNT_TEST_TASKS": task_json,
+                "TNT_TEST_STATUS": self.task_status,
+                "TNT_TEST_STARTED": "1" if self.task_started else "0",
+                "TNT_TEST_UUID": str(
+                    (self.task_data[0] if self.task_data else {}).get(
+                        "uuid", "11111111-1111-1111-1111-111111111111"
+                    )
+                ),
+                "TW_CONFIG_FILE": str(self.temp_dir / "missing.conf"),
+                "TW_STATE_DIR": str(self.state_dir),
+                "TW_GUI_CACHE_FILE": str(self.state_dir / "gui-cache.json"),
+                "TW_ACTION_LOG_FILE": str(self.state_dir / "action.log"),
+                "TW_COMPLETE_SCRIPT": str(SCRIPTS / "taskwarrior_complete_task.sh"),
+                "TW_FORGET_SCRIPT": str(SCRIPTS / "taskwarrior_forget_notification.sh"),
+                "TW_SNOOZE_SCRIPT": str(SCRIPTS / "taskwarrior_snooze_task.sh"),
+                "TW_START_STOP_SCRIPT": str(SCRIPTS / "taskwarrior_start_stop_task.sh"),
+                "TW_NOTIFY_SCRIPT": str(SCRIPTS / "taskwarrior_notify_due_tasks.sh"),
+                "TW_JOT_TIMELOG_ENABLED": "0",
+                "TW_WINDOW_PAST_HOURS": "2",
+                "TW_WINDOW_FUTURE_HOURS": "2",
+                "TW_MAX_TASKS": "12",
+            }
+        )
+        env.update(overrides)
+        return env
+
+    def run_script(
+        self, script: str, *args: str, check: bool = True, **env_overrides: str
+    ) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            ["bash", str(SCRIPTS / script), *args],
+            cwd=ROOT,
+            env=self._env(**env_overrides),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if check and result.returncode != 0:
+            self.fail(
+                f"{script} failed with {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+        return result
+
+    def calls(self) -> list[str]:
+        if not self.calls_file.exists():
+            return []
+        return self.calls_file.read_text().splitlines()
+
+    def task(self, uuid: str, description: str, due: datetime, **extra: object) -> None:
+        self.task_data.append(
+            {
+                "uuid": uuid,
+                "description": description,
+                "due": due.strftime("%Y%m%dT%H%M%S"),
+                "status": "pending",
+                **extra,
+            }
+        )
+
+    def test_channels_are_created_once_and_notifications_are_routed(self) -> None:
+        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        self.task("a" * 36, "overdue", now - timedelta(hours=3))
+        self.task("b" * 36, "window", now + timedelta(minutes=30))
+
+        first = self.run_script("taskwarrior_notify_due_tasks.sh")
+        second = self.run_script("taskwarrior_notify_due_tasks.sh")
+
+        self.assertIn("Tracked 2", first.stdout)
+        self.assertIn("Unchanged:", second.stdout)
+        calls = self.calls()
+        self.assertEqual(3, sum(line.startswith("termux-notification-channel ") for line in calls))
+        notifications = [line for line in calls if line.startswith("termux-notification ")]
+        self.assertEqual(2, len(notifications))
+        self.assertTrue(any("--channel taskwarrior-tnt-window" in line for line in notifications))
+        self.assertTrue(any("--channel taskwarrior-tnt-overdue" in line for line in notifications))
+
+    def test_active_and_window_tasks_beat_overdue_backlog(self) -> None:
+        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        self.task("a" * 36, "old overdue", now - timedelta(hours=3))
+        self.task("b" * 36, "active", now - timedelta(minutes=30))
+        self.task("c" * 36, "window", now + timedelta(minutes=30))
+
+        result = self.run_script("taskwarrior_notify_due_tasks.sh", TW_MAX_TASKS="2")
+        self.assertIn("Tracked 2", result.stdout)
+        notifications = "\n".join(self.calls())
+        self.assertIn("active", notifications)
+        self.assertIn("window", notifications)
+        self.assertNotIn("old overdue", notifications)
+
+    def test_window_boundaries_use_injected_clock(self) -> None:
+        fixed_now = "2026-08-12T13:00:00+00:00"
+        self.task("a" * 36, "boundary start", datetime(2026, 8, 12, 11, 0))
+        self.task("b" * 36, "inside window", datetime(2026, 8, 12, 15, 0))
+        self.task("c" * 36, "earlier today", datetime(2026, 8, 12, 10, 59))
+        self.task("d" * 36, "yesterday", datetime(2026, 8, 11, 10, 0))
+        self.task("e" * 36, "tomorrow task", datetime(2026, 8, 13, 10, 0))
+
+        result = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW=fixed_now,
+            TW_WINDOW_PAST_HOURS="2",
+            TW_WINDOW_FUTURE_HOURS="2",
+        )
+
+        self.assertIn("Tracked 3", result.stdout)
+        notifications = "\n".join(self.calls())
+        self.assertIn("boundary start", notifications)
+        self.assertIn("inside window", notifications)
+        self.assertIn("earlier today", notifications)
+        self.assertNotIn("yesterday", notifications)
+        self.assertNotIn("tomorrow task", notifications)
+
+    def test_quiet_hours_skip_notifications(self) -> None:
+        self.task(
+            "c" * 36,
+            "quiet task",
+            datetime(2026, 8, 12, 13, 30),
+        )
+
+        result = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-12T13:00:00+00:00",
+            TW_QUIET_HOURS_ENABLED="1",
+            TW_QUIET_HOURS_START="12:00",
+            TW_QUIET_HOURS_END="14:00",
+        )
+
+        self.assertIn("Quiet hours active", result.stdout)
+        self.assertFalse(any(line.startswith("termux-notification ") for line in self.calls()))
+
+    def test_local_snooze_expires_and_task_reappears(self) -> None:
+        uuid = "99999999-0000-0000-0000-000000000000"
+        self.task(uuid, "snoozed task", datetime(2026, 8, 12, 13, 30))
+        fixed_now = "2026-08-12T13:00:00+00:00"
+
+        self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "765432",
+            "1h",
+            TW_TEST_NOW=fixed_now,
+        )
+        snooze_file = self.state_dir / "snoozed-tasks"
+        self.assertTrue(snooze_file.exists())
+        self.assertIn(uuid, snooze_file.read_text())
+
+        before = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-12T13:30:00+00:00",
+        )
+        self.assertIn("Tracked 0", before.stdout)
+
+        after = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-12T14:01:00+00:00",
+        )
+        self.assertIn("Tracked 1", after.stdout)
+
+    def test_tomorrow_snooze_uses_explicit_due_modifier(self) -> None:
+        uuid = "88888888-0000-0000-0000-000000000000"
+        self.task(uuid, "tomorrow task", datetime.now().astimezone())
+
+        self.run_script("taskwarrior_snooze_task.sh", uuid, "765433", "tomorrow")
+
+        self.assertIn(
+            f"task rc.hooks:off rc.confirmation:no {uuid} modify due:due+1d",
+            self.calls(),
+        )
+
+    def test_channel_failure_falls_back_to_default_channel(self) -> None:
+        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        self.task("a" * 36, "window", now + timedelta(minutes=30))
+
+        result = self.run_script(
+            "taskwarrior_notify_due_tasks.sh", TNT_TEST_CHANNEL_FAIL="1"
+        )
+
+        self.assertIn("Tracked 1", result.stdout)
+        self.assertIn("could not create execution notification channel", result.stderr)
+        notifications = [
+            line for line in self.calls() if line.startswith("termux-notification ")
+        ]
+        self.assertEqual(1, len(notifications))
+        self.assertNotIn("--channel ", notifications[0])
+
+    def test_dismissed_notification_returns_on_next_scan(self) -> None:
+        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        self.task("b" * 36, "window", now + timedelta(minutes=30))
+
+        self.run_script("taskwarrior_notify_due_tasks.sh")
+        state_file = self.state_dir / "active-notifications"
+        notification_id = state_file.read_text().split("\t", 1)[0]
+        self.run_script("taskwarrior_forget_notification.sh", notification_id)
+        self.run_script("taskwarrior_notify_due_tasks.sh")
+
+        notifications = [
+            line for line in self.calls() if line.startswith("termux-notification ")
+        ]
+        self.assertEqual(2, len(notifications))
+
+    def test_duration_and_delta_formatting_are_deterministic(self) -> None:
+        fake_termuxgui = types.ModuleType("termuxgui")
+        fake_termuxgui.Connection = object
+        sys.modules["termuxgui"] = fake_termuxgui
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "taskwarrior_gui", SCRIPTS / "taskwarrior_gui.py"
+            )
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            gui = importlib.util.module_from_spec(spec)
+            sys.modules["taskwarrior_gui"] = gui
+            spec.loader.exec_module(gui)
+            self.assertEqual(timedelta(minutes=10), gui.parse_iso_duration("PT10M"))
+            self.assertIsNone(gui.parse_iso_duration("not-a-duration"))
+            self.assertEqual("1h 5m", gui.format_delta(timedelta(hours=1, minutes=5)))
+        finally:
+            sys.modules.pop("taskwarrior_gui", None)
+            sys.modules.pop("termuxgui", None)
+
+    def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
+        uuid = "dddddddd-0000-0000-0000-000000000000"
+        self.task_status = "completed"
+        self.run_script(
+            "taskwarrior_complete_task.sh",
+            uuid,
+            "123456",
+            TNT_TEST_UUID=uuid,
+        )
+        calls = self.calls()
+        self.assertFalse(any(line.startswith("task ") for line in calls))
+        self.assertIn("termux-notification-remove 123456", calls)
+        self.assertIn("termux-toast " + uuid[:8] + " already completed; reminder cleared", calls)
+
+    def test_start_and_stop_are_idempotent(self) -> None:
+        uuid = "eeeeeeee-0000-0000-0000-000000000000"
+        self.task_status = "pending"
+        self.task_data = [{"uuid": uuid, "status": "pending"}]
+        self.task_started = True
+        self.run_script(
+            "taskwarrior_start_stop_task.sh", "start", uuid, "1", TNT_TEST_UUID=uuid
+        )
+        self.task_started = False
+        self.run_script(
+            "taskwarrior_start_stop_task.sh", "stop", uuid, "2", TNT_TEST_UUID=uuid
+        )
+        calls = self.calls()
+        self.assertFalse(any(line.startswith("task ") for line in calls))
+        self.assertIn("termux-toast " + uuid[:8] + " already active", calls)
+        self.assertIn("termux-toast " + uuid[:8] + " already stopped", calls)
+
+    def test_missing_task_snooze_clears_notification(self) -> None:
+        uuid = "ffffffff-0000-0000-0000-000000000000"
+        self.task_status = "missing"
+        self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "654321",
+            "tomorrow",
+            TNT_TEST_UUID=uuid,
+        )
+        calls = self.calls()
+        self.assertFalse(any(line.startswith("task ") for line in calls))
+        self.assertIn("termux-notification-remove 654321", calls)
+
+    def test_task_action_failure_is_reported(self) -> None:
+        uuid = "11111111-0000-0000-0000-000000000000"
+        self.task_status = "pending"
+        self.task_data = [{"uuid": uuid, "status": "pending"}]
+        result = self.run_script(
+            "taskwarrior_complete_task.sh",
+            uuid,
+            "987654",
+            check=False,
+            TNT_TEST_UUID=uuid,
+            TNT_TEST_ACTION_FAIL="1",
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("completion failed", result.stdout)
+        self.assertIn("completion failed", "\n".join(self.calls()))
+
+    def test_common_snapshot_reports_missing_status(self) -> None:
+        uuid = "2" * 36
+        env = self._env(TNT_TEST_STATUS="missing")
+        command = (
+            "source scripts/taskwarrior_tnt_common.sh; "
+            f"tnt_load_task_snapshot /tmp/unused '{self.bin_dir / 'task'}' >/dev/null; "
+            "printf '%s' \"$TNT_TASK_STATUS\""
+        )
+        # Use the actual task path as the helper's first argument.
+        command = (
+            "source scripts/taskwarrior_tnt_common.sh; "
+            f"tnt_load_task_snapshot '{self.bin_dir / 'task'}' '{uuid}'; "
+            "printf '%s' \"$TNT_TASK_STATUS\""
+        )
+        result = subprocess.run(
+            ["bash", "-c", command], cwd=ROOT, env=env, capture_output=True, text=True
+        )
+        self.assertEqual(0, result.returncode)
+        self.assertEqual("missing", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

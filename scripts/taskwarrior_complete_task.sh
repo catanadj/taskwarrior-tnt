@@ -108,45 +108,6 @@ run_jot_command() {
   esac
 }
 
-task_start_epoch() {
-  local output
-  if output="$("$TASK_BIN" rc.hooks:off rc.verbose:nothing rc.json.array:on "$TASK_UUID" export 2>/dev/null)"; then
-    python3 - "$output" <<'PY'
-import json
-import sys
-from datetime import datetime, timezone
-
-try:
-    tasks = json.loads(sys.argv[1] or "[]")
-except json.JSONDecodeError:
-    raise SystemExit(1)
-
-if not tasks:
-    raise SystemExit(1)
-
-start = tasks[0].get("start")
-if not start:
-    raise SystemExit(1)
-
-for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
-    try:
-        parsed = datetime.strptime(start, fmt)
-    except ValueError:
-        continue
-    if start.endswith("Z"):
-        parsed = parsed.replace(tzinfo=timezone.utc).astimezone()
-    else:
-        parsed = parsed.astimezone()
-    print(int(parsed.timestamp()))
-    raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-  else
-    return 1
-  fi
-}
-
 format_duration() {
   python3 - "$1" <<'PY'
 import sys
@@ -188,10 +149,40 @@ fi
 tnt_acquire_state_lock "$STATE_DIR"
 trap tnt_release_state_lock EXIT
 
-if ACTIVE_STARTED_EPOCH="$(task_start_epoch)"; then
+clear_task_reminder() {
+  if [[ -f "$SNOOZE_FILE" ]]; then
+    tnt_remove_snooze_uuid "$SNOOZE_FILE" "$TASK_UUID"
+  fi
+  if [[ -n "$NOTIFICATION_ID" ]] && command -v termux-notification-remove >/dev/null 2>&1; then
+    termux-notification-remove "$NOTIFICATION_ID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$NOTIFICATION_ID" && -x "$FORGET_SCRIPT" ]]; then
+    "$FORGET_SCRIPT" "$NOTIFICATION_ID" >/dev/null 2>&1 || true
+  fi
+}
+
+if ! tnt_load_task_snapshot "$TASK_BIN" "$TASK_UUID"; then
+  log_action "ERROR task inspection failed uuid=$TASK_UUID output=$TNT_TASK_SNAPSHOT_ERROR"
+  show_toast "$TASK_SHORT_ID completion failed; inspect error"
+  echo "ERROR: could not inspect task: $TNT_TASK_SNAPSHOT_ERROR"
+  exit 2
+fi
+
+if [[ "$TNT_TASK_STATUS" != "pending" ]]; then
+  clear_task_reminder
+  if [[ "$TNT_TASK_STATUS" == "completed" ]]; then
+    log_action "ACK task already completed uuid=$TASK_UUID"
+    show_toast "$TASK_SHORT_ID already completed; reminder cleared"
+  else
+    log_action "ACK stale completion action uuid=$TASK_UUID status=$TNT_TASK_STATUS"
+    show_toast "$TASK_SHORT_ID no longer pending; reminder cleared"
+  fi
+  exit 0
+fi
+
+ACTIVE_STARTED_EPOCH="$TNT_TASK_START_EPOCH"
+if [[ -n "$ACTIVE_STARTED_EPOCH" ]]; then
   ACTIVE_DURATION="$(format_duration "$ACTIVE_STARTED_EPOCH" 2>/dev/null || true)"
-else
-  ACTIVE_STARTED_EPOCH=""
 fi
 
 if [[ "$JOT_TIMELOG_ENABLED" == "1" ]]; then
@@ -217,27 +208,24 @@ else
   JOT_STATUS="disabled"
 fi
 
-if output="$("$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" done 2>&1)"; then
+if output="$("$TASK_BIN" rc.hooks:off rc.confirmation:no "$TASK_UUID" "done" 2>&1)"; then
   log_action "OK task done uuid=$TASK_UUID output=$output"
 else
   rc=$?
+  if tnt_load_task_snapshot "$TASK_BIN" "$TASK_UUID" &&
+     [[ "$TNT_TASK_STATUS" != "pending" ]]; then
+    clear_task_reminder
+    log_action "ACK task became non-pending during completion uuid=$TASK_UUID status=$TNT_TASK_STATUS"
+    show_toast "$TASK_SHORT_ID already completed; reminder cleared"
+    exit 0
+  fi
   log_action "ERROR task done failed rc=$rc uuid=$TASK_UUID output=$output"
   show_toast "$TASK_SHORT_ID completion failed"
   echo "ERROR: task completion failed: $output"
   exit "$rc"
 fi
 
-if [[ -f "$SNOOZE_FILE" ]]; then
-  tnt_remove_snooze_uuid "$SNOOZE_FILE" "$TASK_UUID"
-fi
-
-if [[ -n "$NOTIFICATION_ID" ]] && command -v termux-notification-remove >/dev/null 2>&1; then
-  termux-notification-remove "$NOTIFICATION_ID" >/dev/null 2>&1 || true
-fi
-
-if [[ -n "$NOTIFICATION_ID" && -x "$FORGET_SCRIPT" ]]; then
-  "$FORGET_SCRIPT" "$NOTIFICATION_ID" >/dev/null 2>&1 || true
-fi
+clear_task_reminder
 
 if command -v termux-toast >/dev/null 2>&1; then
   toast_message="$TASK_SHORT_ID completed"

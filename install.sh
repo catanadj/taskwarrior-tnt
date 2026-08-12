@@ -69,6 +69,12 @@ if [[ "$RUN_CHECKS" == "1" ]]; then
     echo "WARN: termux-notification not found. Install Termux:API app and run: pkg install termux-api"
   fi
 
+  if command -v termux-notification-channel >/dev/null 2>&1; then
+    echo "OK: termux-notification-channel found"
+  else
+    echo "WARN: termux-notification-channel not found. TNT will use the default notification channel"
+  fi
+
   if python3 -c 'import termuxgui' >/dev/null 2>&1; then
     echo "OK: termuxgui python module found"
   else
@@ -105,4 +111,7 @@ Edit config:
 
 Test scan:
   $INSTALL_DIR/taskwarrior_notify_due_tasks.sh
+
+Create or refresh Android notification channels:
+  $INSTALL_DIR/taskwarrior_notify_due_tasks.sh --setup-channels
 EOF

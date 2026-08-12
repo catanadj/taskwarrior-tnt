@@ -37,8 +37,15 @@ The installer copies scripts to `~/.termux/tasker`, preserves your existing conf
 
 Useful tests:
 
+Run the local dependency-free regression suite from the repository root:
+
+```bash
+PYTHONPATH=. python3 -m unittest discover -s tests -v
+```
+
 ```sh
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --doctor
+~/.termux/tasker/taskwarrior_notify_due_tasks.sh --setup-channels
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --test-notification
 TW_DRY_RUN=1 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh
 ```
@@ -86,6 +93,10 @@ TW_QUIET_HOURS_END=07:00
 TW_EXECUTION_NOTIFICATION_ICON=event_note
 TW_OVERDUE_NOTIFICATION_ICON=warning
 TW_STARTED_NOTIFICATION_ICON=play_arrow
+TW_NOTIFICATION_CHANNELS_ENABLED=1
+TW_EXECUTION_NOTIFICATION_CHANNEL=taskwarrior-tnt-window
+TW_OVERDUE_NOTIFICATION_CHANNEL=taskwarrior-tnt-overdue
+TW_STARTED_NOTIFICATION_CHANNEL=taskwarrior-tnt-active
 TW_NOTIFICATION_PRIORITY=high
 TW_STARTED_NOTIFICATION_PRIORITY=high
 TW_PROMOTE_STARTED_ON_START=1
@@ -105,6 +116,7 @@ Notes:
 - `TW_REORDER_EACH_RUN=1` removes and reposts all matching notifications each scan so Android's recency ordering is refreshed. This can cause visible refreshes or sounds.
 - `TW_PROMOTE_STARTED_ON_START=1` only promotes the task you just started. It removes that task notification and posts it after the normal scan order so Android usually places it on top.
 - Quiet hours skip notification posting but still let the scan run.
+- On Android 8+, window, overdue, and active tasks use separate notification channels.
 - Active tasks and execution-window tasks take precedence over overdue tasks when `TW_MAX_TASKS` is reached.
 - `TW_SNOOZE_TOMORROW_MODE=modify_due` runs `task <uuid> modify due:due+1d`.
 - One-off environment variables override the config, for example `TW_DRY_RUN=1`.
@@ -132,7 +144,63 @@ Actions:
 - `Done`: completes the task, removes its notification, and stops jot timelog if the task was active.
 - `Tomorrow`: moves the due date to tomorrow by default.
 
+Actions inspect the current Taskwarrior state before changing it. Already-completed or missing tasks are acknowledged and their stale notifications are cleared. Repeated Start or Stop actions also succeed harmlessly when the task is already in the requested state.
+
 Each notification uses a stable Android notification ID derived from the Taskwarrior UUID. TNT stores a locked state manifest and only calls Android when displayed task data changes. Swiped notifications are removed from the manifest and return on the next scan if still relevant.
+
+## Hookless Actions and Deferred Reconciliation
+
+TNT deliberately invokes Taskwarrior with hooks disabled. Tasker launches Termux
+actions in a reduced Android environment where hook dependencies, interpreter
+paths, and environment variables may not match an interactive Termux shell.
+Keeping notification actions hookless makes `Start`, `Stop`, `Done`, and
+`Tomorrow` reliable and prevents every edge client from having to reproduce the
+full hook environment.
+
+Integrations that would normally depend on hooks are handled at explicit,
+controlled boundaries:
+
+- TNT invokes Jot timelog commands directly for `Start`, `Stop`, and `Done`.
+- Nautical recurrence is recovered by `taskwarrior-sync-helper` in an environment
+  where Nautical is installed and configured.
+
+The Nautical flow is eventually consistent:
+
+1. TNT changes the task locally with hooks disabled.
+2. `taskwarrior-sync-helper` detects the Taskwarrior local-operation backlog.
+3. Nautical reconciliation runs before uploading local changes, creating any
+   missing successor tasks.
+4. The original change and its successor are uploaded together.
+5. When a device instead pulls a hookless completion, reconciliation runs after
+   the pull. If it creates local operations, Sync Helper performs one immediate
+   follow-up sync so the successors are propagated in the same invocation.
+
+Enable applied reconciliation in the local Sync Helper configuration on the
+device responsible for recovery:
+
+```sh
+RUN_NAUTICAL_RECONCILE=1
+NAUTICAL_RECONCILE_APPLY=1
+```
+
+Run `taskwarrior-sync-helper/task_sync.sh` on the normal sync schedule rather
+than calling `task sync` directly. Until that helper completes successfully, a
+successor for a hooklessly completed recurring task may not yet exist. A failed
+reconciliation exits nonzero without acknowledging the pulled signal. A failed
+follow-up upload also exits nonzero and retains its pending generation. In both
+cases, the next Sync Helper run retries safely.
+
+### Notification channels
+
+TNT creates separate channels for execution-window, overdue, and active tasks on the first real scan. This lets you configure sound, vibration, visibility, and interruption behavior for each category in Android's notification settings.
+
+Force channel setup after changing channel IDs or names:
+
+```sh
+~/.termux/tasker/taskwarrior_notify_due_tasks.sh --setup-channels
+```
+
+Android preserves user settings for an existing channel ID. Changing only its configured name will not reset sound or vibration choices. If `termux-notification-channel` is unavailable or setup fails, TNT warns and uses Termux's default notification channel.
 
 ## Jot Integration
 

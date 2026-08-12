@@ -29,7 +29,7 @@ restore_override() {
   fi
 }
 
-for config_name in TASK_BIN TW_STATE_DIR TW_FORGET_SCRIPT TW_SNOOZE_1H_MODE TW_SNOOZE_TOMORROW_MODE TW_COMMON_SCRIPT TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED; do
+for config_name in TASK_BIN TW_STATE_DIR TW_FORGET_SCRIPT TW_SNOOZE_1H_MODE TW_SNOOZE_TOMORROW_MODE TW_COMMON_SCRIPT TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_TEST_NOW; do
   remember_override "$config_name"
 done
 
@@ -38,7 +38,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-for config_name in TASK_BIN TW_STATE_DIR TW_FORGET_SCRIPT TW_SNOOZE_1H_MODE TW_SNOOZE_TOMORROW_MODE TW_COMMON_SCRIPT TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED; do
+for config_name in TASK_BIN TW_STATE_DIR TW_FORGET_SCRIPT TW_SNOOZE_1H_MODE TW_SNOOZE_TOMORROW_MODE TW_COMMON_SCRIPT TW_ACTION_LOG_FILE TW_ACTION_TOAST_ENABLED TW_TEST_NOW; do
   restore_override "$config_name"
 done
 
@@ -113,6 +113,25 @@ remove_notification() {
   fi
 }
 
+if ! tnt_load_task_snapshot "$TASK_BIN" "$TASK_UUID"; then
+  log_action "ERROR task inspection failed during snooze uuid=$TASK_UUID output=$TNT_TASK_SNAPSHOT_ERROR"
+  show_toast "${TASK_UUID%%-*} snooze failed; inspect error"
+  echo "ERROR: could not inspect task: $TNT_TASK_SNAPSHOT_ERROR"
+  exit 2
+fi
+
+if [[ "$TNT_TASK_STATUS" != "pending" ]]; then
+  remove_local_snooze
+  remove_notification
+  log_action "ACK stale snooze action uuid=$TASK_UUID status=$TNT_TASK_STATUS"
+  if [[ "$TNT_TASK_STATUS" == "completed" ]]; then
+    show_toast "${TASK_UUID%%-*} already completed; reminder cleared"
+  else
+    show_toast "${TASK_UUID%%-*} no longer pending; reminder cleared"
+  fi
+  exit 0
+fi
+
 snooze_value="$(printf '%s' "$SNOOZE_UNTIL" | tr '[:upper:]' '[:lower:]')"
 snooze_mode="local"
 due_modifier=""
@@ -143,6 +162,14 @@ if [[ "$snooze_mode" == "modify_due" ]]; then
     log_action "OK task snooze modify uuid=$TASK_UUID modifier=$due_modifier output=$output"
   else
     rc=$?
+    if tnt_load_task_snapshot "$TASK_BIN" "$TASK_UUID" &&
+       [[ "$TNT_TASK_STATUS" != "pending" ]]; then
+      remove_local_snooze
+      remove_notification
+      log_action "ACK task became non-pending during snooze uuid=$TASK_UUID status=$TNT_TASK_STATUS"
+      show_toast "${TASK_UUID%%-*} no longer pending; reminder cleared"
+      exit 0
+    fi
     log_action "ERROR task snooze modify failed rc=$rc uuid=$TASK_UUID modifier=$due_modifier output=$output"
     show_toast "${TASK_UUID%%-*} snooze failed"
     echo "ERROR: task snooze failed: $output"
@@ -158,11 +185,18 @@ if [[ "$snooze_mode" == "modify_due" ]]; then
 fi
 
 until_epoch="$(python3 - "$SNOOZE_UNTIL" <<'PY'
+import os
 import sys
 from datetime import datetime, timedelta
 
 value = sys.argv[1].strip().lower()
-now = datetime.now().astimezone()
+now_value = os.environ.get("TW_TEST_NOW")
+try:
+    now = datetime.fromisoformat(now_value) if now_value else datetime.now().astimezone()
+except ValueError:
+    raise SystemExit(f"invalid TW_TEST_NOW: {now_value}")
+if now.tzinfo is None:
+    now = now.astimezone()
 
 if value in ("tomorrow", "+1 day", "1 day"):
     target = now + timedelta(days=1)

@@ -52,6 +52,13 @@ for config_name in \
   TW_EXECUTION_NOTIFICATION_ICON \
   TW_OVERDUE_NOTIFICATION_ICON \
   TW_STARTED_NOTIFICATION_ICON \
+  TW_NOTIFICATION_CHANNELS_ENABLED \
+  TW_EXECUTION_NOTIFICATION_CHANNEL \
+  TW_EXECUTION_NOTIFICATION_CHANNEL_NAME \
+  TW_OVERDUE_NOTIFICATION_CHANNEL \
+  TW_OVERDUE_NOTIFICATION_CHANNEL_NAME \
+  TW_STARTED_NOTIFICATION_CHANNEL \
+  TW_STARTED_NOTIFICATION_CHANNEL_NAME \
   TW_NOTIFICATION_PRIORITY \
   TW_STARTED_NOTIFICATION_PRIORITY \
   TASK_BIN \
@@ -65,7 +72,8 @@ for config_name in \
   JOT_BIN \
   TW_COMMON_SCRIPT \
   TW_STATE_DIR \
-  TW_GUI_CACHE_FILE; do
+  TW_GUI_CACHE_FILE \
+  TW_TEST_NOW; do
   remember_override "$config_name"
 done
 
@@ -91,6 +99,13 @@ for config_name in \
   TW_EXECUTION_NOTIFICATION_ICON \
   TW_OVERDUE_NOTIFICATION_ICON \
   TW_STARTED_NOTIFICATION_ICON \
+  TW_NOTIFICATION_CHANNELS_ENABLED \
+  TW_EXECUTION_NOTIFICATION_CHANNEL \
+  TW_EXECUTION_NOTIFICATION_CHANNEL_NAME \
+  TW_OVERDUE_NOTIFICATION_CHANNEL \
+  TW_OVERDUE_NOTIFICATION_CHANNEL_NAME \
+  TW_STARTED_NOTIFICATION_CHANNEL \
+  TW_STARTED_NOTIFICATION_CHANNEL_NAME \
   TW_NOTIFICATION_PRIORITY \
   TW_STARTED_NOTIFICATION_PRIORITY \
   TASK_BIN \
@@ -104,7 +119,8 @@ for config_name in \
   JOT_BIN \
   TW_COMMON_SCRIPT \
   TW_STATE_DIR \
-  TW_GUI_CACHE_FILE; do
+  TW_GUI_CACHE_FILE \
+  TW_TEST_NOW; do
   restore_override "$config_name"
 done
 
@@ -124,6 +140,13 @@ OVERDUE_GROUP_SUMMARY_ID="${TW_OVERDUE_GROUP_SUMMARY_ID:-999001}"
 EXECUTION_NOTIFICATION_ICON="${TW_EXECUTION_NOTIFICATION_ICON:-event_note}"
 OVERDUE_NOTIFICATION_ICON="${TW_OVERDUE_NOTIFICATION_ICON:-warning}"
 STARTED_NOTIFICATION_ICON="${TW_STARTED_NOTIFICATION_ICON:-play_arrow}"
+NOTIFICATION_CHANNELS_ENABLED="${TW_NOTIFICATION_CHANNELS_ENABLED:-1}"
+EXECUTION_NOTIFICATION_CHANNEL="${TW_EXECUTION_NOTIFICATION_CHANNEL:-taskwarrior-tnt-window}"
+EXECUTION_NOTIFICATION_CHANNEL_NAME="${TW_EXECUTION_NOTIFICATION_CHANNEL_NAME:-Taskwarrior TNT window}"
+OVERDUE_NOTIFICATION_CHANNEL="${TW_OVERDUE_NOTIFICATION_CHANNEL:-taskwarrior-tnt-overdue}"
+OVERDUE_NOTIFICATION_CHANNEL_NAME="${TW_OVERDUE_NOTIFICATION_CHANNEL_NAME:-Taskwarrior TNT overdue}"
+STARTED_NOTIFICATION_CHANNEL="${TW_STARTED_NOTIFICATION_CHANNEL:-taskwarrior-tnt-active}"
+STARTED_NOTIFICATION_CHANNEL_NAME="${TW_STARTED_NOTIFICATION_CHANNEL_NAME:-Taskwarrior TNT active}"
 NOTIFICATION_PRIORITY="${TW_NOTIFICATION_PRIORITY:-high}"
 STARTED_NOTIFICATION_PRIORITY="${TW_STARTED_NOTIFICATION_PRIORITY:-high}"
 TASK_BIN="${TASK_BIN:-task}"
@@ -138,9 +161,12 @@ COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
 STATE_FILE="$STATE_DIR/active-notifications"
 SNOOZE_FILE="$STATE_DIR/snoozed-tasks"
+CHANNEL_STATE_FILE="$STATE_DIR/notification-channels"
 GUI_CACHE_FILE="${TW_GUI_CACHE_FILE:-$STATE_DIR/gui-cache.json}"
 PROMOTE_UUID="${TW_PROMOTE_UUID:-}"
-NOTIFICATION_CONFIG_SIGNATURE="$EXECUTION_NOTIFICATION_GROUP|$OVERDUE_NOTIFICATION_GROUP|$EXECUTION_NOTIFICATION_ICON|$OVERDUE_NOTIFICATION_ICON|$STARTED_NOTIFICATION_ICON|$NOTIFICATION_PRIORITY|$STARTED_NOTIFICATION_PRIORITY|$COMPLETE_SCRIPT|$FORGET_SCRIPT|$SNOOZE_SCRIPT|$START_STOP_SCRIPT|$START_STOP_ACTION_ENABLED"
+CHANNELS_ACTIVE=0
+CHANNEL_SIGNATURE="$EXECUTION_NOTIFICATION_CHANNEL|$EXECUTION_NOTIFICATION_CHANNEL_NAME|$OVERDUE_NOTIFICATION_CHANNEL|$OVERDUE_NOTIFICATION_CHANNEL_NAME|$STARTED_NOTIFICATION_CHANNEL|$STARTED_NOTIFICATION_CHANNEL_NAME"
+NOTIFICATION_CONFIG_SIGNATURE="schema=2|$EXECUTION_NOTIFICATION_GROUP|$OVERDUE_NOTIFICATION_GROUP|$EXECUTION_NOTIFICATION_ICON|$OVERDUE_NOTIFICATION_ICON|$STARTED_NOTIFICATION_ICON|$NOTIFICATION_CHANNELS_ENABLED|$CHANNEL_SIGNATURE|$NOTIFICATION_PRIORITY|$STARTED_NOTIFICATION_PRIORITY|$COMPLETE_SCRIPT|$FORGET_SCRIPT|$SNOOZE_SCRIPT|$START_STOP_SCRIPT|$START_STOP_ACTION_ENABLED"
 export TASK_BIN
 
 if [[ ! -r "$COMMON_SCRIPT" ]]; then
@@ -149,6 +175,73 @@ if [[ ! -r "$COMMON_SCRIPT" ]]; then
 fi
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
+
+setup_notification_channels() {
+  local force="${1:-0}"
+  local current_signature=""
+  local tmp_file output
+
+  if [[ "$NOTIFICATION_CHANNELS_ENABLED" != "1" ]]; then
+    return 0
+  fi
+  if ! command -v termux-notification-channel >/dev/null 2>&1; then
+    echo "WARN: termux-notification-channel not found; using the default Android channel." >&2
+    return 1
+  fi
+  if [[ -z "$EXECUTION_NOTIFICATION_CHANNEL" ||
+        -z "$EXECUTION_NOTIFICATION_CHANNEL_NAME" ||
+        -z "$OVERDUE_NOTIFICATION_CHANNEL" ||
+        -z "$OVERDUE_NOTIFICATION_CHANNEL_NAME" ||
+        -z "$STARTED_NOTIFICATION_CHANNEL" ||
+        -z "$STARTED_NOTIFICATION_CHANNEL_NAME" ]]; then
+    echo "WARN: notification channel ids and names must not be empty; using the default Android channel." >&2
+    return 1
+  fi
+
+  mkdir -p "$STATE_DIR"
+  if [[ -f "$CHANNEL_STATE_FILE" ]]; then
+    IFS= read -r current_signature < "$CHANNEL_STATE_FILE" || true
+  fi
+  if [[ "$force" != "1" && "$current_signature" == "$CHANNEL_SIGNATURE" ]]; then
+    CHANNELS_ACTIVE=1
+    return 0
+  fi
+
+  if ! output="$(termux-notification-channel "$EXECUTION_NOTIFICATION_CHANNEL" "$EXECUTION_NOTIFICATION_CHANNEL_NAME" 2>&1)"; then
+    echo "WARN: could not create execution notification channel: $output" >&2
+    return 1
+  fi
+  if ! output="$(termux-notification-channel "$OVERDUE_NOTIFICATION_CHANNEL" "$OVERDUE_NOTIFICATION_CHANNEL_NAME" 2>&1)"; then
+    echo "WARN: could not create overdue notification channel: $output" >&2
+    return 1
+  fi
+  if ! output="$(termux-notification-channel "$STARTED_NOTIFICATION_CHANNEL" "$STARTED_NOTIFICATION_CHANNEL_NAME" 2>&1)"; then
+    echo "WARN: could not create active notification channel: $output" >&2
+    return 1
+  fi
+
+  tmp_file="$(mktemp)"
+  printf '%s\n' "$CHANNEL_SIGNATURE" > "$tmp_file"
+  mv "$tmp_file" "$CHANNEL_STATE_FILE"
+  CHANNELS_ACTIVE=1
+}
+
+if [[ "$COMMAND" == "--setup-channels" ]]; then
+  if [[ "$NOTIFICATION_CHANNELS_ENABLED" != "1" ]]; then
+    echo "Notification channels are disabled in $CONFIG_FILE."
+    exit 0
+  fi
+  if setup_notification_channels 1; then
+    echo "Created or refreshed Taskwarrior TNT notification channels."
+    exit 0
+  fi
+  exit 2
+fi
+
+if [[ "$DRY_RUN" != "1" && "$DOCTOR_MODE" != "1" ]]; then
+  setup_notification_channels 0 || true
+fi
+NOTIFICATION_CONFIG_SIGNATURE="$NOTIFICATION_CONFIG_SIGNATURE|channels_active=$CHANNELS_ACTIVE"
 
 if ! command -v "$TASK_BIN" >/dev/null 2>&1; then
   if [[ "$DOCTOR_MODE" == "1" ]]; then
@@ -214,7 +307,11 @@ if [[ "$DRY_RUN" != "1" && "$START_STOP_ACTION_ENABLED" == "1" && ! -x "$START_S
 fi
 
 if [[ "$COMMAND" == "--test-notification" ]]; then
-  termux-notification \
+  test_channel_args=()
+  if [[ "$CHANNELS_ACTIVE" == "1" ]]; then
+    test_channel_args=(--channel "$EXECUTION_NOTIFICATION_CHANNEL")
+  fi
+  termux-notification "${test_channel_args[@]}" \
     --id 998999 \
     --title "Taskwarrior TNT test" \
     --content "If you can see this, Termux:API notifications are working." \
@@ -225,6 +322,7 @@ fi
 
 in_quiet_hours() {
   python3 - "$QUIET_HOURS_ENABLED" "$QUIET_HOURS_START" "$QUIET_HOURS_END" <<'PY'
+import os
 import re
 import sys
 from datetime import datetime
@@ -242,7 +340,14 @@ if not start_match or not end_match:
 
 start_minutes = int(start_match.group(1)) * 60 + int(start_match.group(2))
 end_minutes = int(end_match.group(1)) * 60 + int(end_match.group(2))
-now = datetime.now().astimezone()
+now_value = os.environ.get("TW_TEST_NOW")
+try:
+    now = datetime.fromisoformat(now_value) if now_value else datetime.now().astimezone()
+except ValueError:
+    print(f"ERROR: invalid TW_TEST_NOW: {now_value}", file=sys.stderr)
+    raise SystemExit(2)
+if now.tzinfo is None:
+    now = now.astimezone()
 now_minutes = now.hour * 60 + now.minute
 
 if start_minutes == end_minutes:
@@ -287,8 +392,17 @@ run_doctor() {
   echo "Quiet hours: enabled=$QUIET_HOURS_ENABLED start=$QUIET_HOURS_START end=$QUIET_HOURS_END"
   echo "Reorder each run: $REORDER_EACH_RUN"
   echo "Groups: window=$EXECUTION_NOTIFICATION_GROUP overdue=$OVERDUE_NOTIFICATION_GROUP summaries=$GROUP_SUMMARY_ENABLED"
+  echo "Channels: enabled=$NOTIFICATION_CHANNELS_ENABLED window=$EXECUTION_NOTIFICATION_CHANNEL overdue=$OVERDUE_NOTIFICATION_CHANNEL active=$STARTED_NOTIFICATION_CHANNEL"
   echo "Icons: window=$EXECUTION_NOTIFICATION_ICON overdue=$OVERDUE_NOTIFICATION_ICON started=$STARTED_NOTIFICATION_ICON"
   echo "Priority: default=$NOTIFICATION_PRIORITY started=$STARTED_NOTIFICATION_PRIORITY"
+  if [[ "$NOTIFICATION_CHANNELS_ENABLED" != "1" ]]; then
+    echo "Channel setup: disabled"
+  elif [[ -f "$CHANNEL_STATE_FILE" ]] && IFS= read -r doctor_channel_signature < "$CHANNEL_STATE_FILE" &&
+       [[ "$doctor_channel_signature" == "$CHANNEL_SIGNATURE" ]]; then
+    echo "Channel setup: initialized"
+  else
+    echo "Channel setup: pending (run $0 --setup-channels)"
+  fi
   echo "State dir: $STATE_DIR"
   echo
 
@@ -296,6 +410,7 @@ run_doctor() {
   doctor_check_command "$TASK_BIN"
   doctor_check_command python3
   doctor_check_command termux-notification
+  doctor_check_command termux-notification-channel
   doctor_check_command termux-notification-remove
   doctor_check_command termux-toast
   if [[ "$JOT_TIMELOG_ENABLED" == "1" ]]; then
@@ -374,7 +489,7 @@ touch "$SNOOZE_FILE"
 declare -A stale_notifications=()
 declare -A previous_fingerprints=()
 if [[ -f "$STATE_FILE" ]]; then
-  while IFS=$'\t' read -r previous_id previous_uuid previous_fingerprint _; do
+  while IFS=$'\t' read -r previous_id _ previous_fingerprint _; do
     if [[ -n "$previous_id" ]]; then
       stale_notifications["$previous_id"]=1
       previous_fingerprints["$previous_id"]="$previous_fingerprint"
@@ -477,7 +592,14 @@ if past_hours < 0 or future_hours < 0 or max_tasks < 1:
     print("ERROR\twindow hours must be non-negative and max tasks must be at least 1")
     sys.exit(2)
 
-now = datetime.now().astimezone()
+now_value = os.environ.get("TW_TEST_NOW")
+try:
+    now = datetime.fromisoformat(now_value) if now_value else datetime.now().astimezone()
+except ValueError:
+    print(f"ERROR\tinvalid TW_TEST_NOW: {now_value}")
+    sys.exit(2)
+if now.tzinfo is None:
+    now = now.astimezone()
 now_epoch = int(now.timestamp())
 snoozed_until_by_uuid = {}
 try:
@@ -710,9 +832,10 @@ post_notification_record() {
   local task_button="$7"
   local started_value="$8"
   local fingerprint="$9"
-  local notification_group notification_icon notification_priority
+  local notification_group notification_icon notification_priority notification_channel
   local complete_action delete_action snooze_hour_action snooze_tomorrow_action
   local button1_text button1_action
+  local -a channel_args=()
 
   [[ -z "$notification_id" ]] && return 0
 
@@ -728,15 +851,21 @@ post_notification_record() {
     notification_group="$OVERDUE_NOTIFICATION_GROUP"
     notification_icon="$OVERDUE_NOTIFICATION_ICON"
     notification_priority="$NOTIFICATION_PRIORITY"
+    notification_channel="$OVERDUE_NOTIFICATION_CHANNEL"
   else
     window_count=$((window_count + 1))
     notification_group="$EXECUTION_NOTIFICATION_GROUP"
     notification_icon="$EXECUTION_NOTIFICATION_ICON"
     notification_priority="$NOTIFICATION_PRIORITY"
+    notification_channel="$EXECUTION_NOTIFICATION_CHANNEL"
   fi
   if [[ "$started_value" == "1" ]]; then
     notification_icon="$STARTED_NOTIFICATION_ICON"
     notification_priority="$STARTED_NOTIFICATION_PRIORITY"
+    notification_channel="$STARTED_NOTIFICATION_CHANNEL"
+  fi
+  if [[ "$CHANNELS_ACTIVE" == "1" ]]; then
+    channel_args=(--channel "$notification_channel")
   fi
 
   complete_action="$COMPLETE_SCRIPT $uuid $notification_id"
@@ -745,7 +874,7 @@ post_notification_record() {
   snooze_tomorrow_action="$SNOOZE_SCRIPT $uuid $notification_id tomorrow"
   if [[ "$START_STOP_ACTION_ENABLED" == "1" ]]; then
     button1_text="$task_button"
-    button1_action="$START_STOP_SCRIPT $task_action $uuid"
+    button1_action="$START_STOP_SCRIPT $task_action $uuid $notification_id"
   else
     button1_text="Snooze 1h"
     button1_action="$snooze_hour_action"
@@ -758,9 +887,10 @@ post_notification_record() {
     return 0
   fi
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf 'DRY_RUN id=%s uuid=%s reorder=%s title=%s content=%s button1=%s button2=Done action=%s\n' "$notification_id" "$uuid" "$REORDER_EACH_RUN" "$title" "$content" "$button1_text" "$complete_action"
+    printf 'DRY_RUN id=%s uuid=%s channel=%s reorder=%s title=%s content=%s button1=%s button2=Done action=%s\n' "$notification_id" "$uuid" "$notification_channel" "$REORDER_EACH_RUN" "$title" "$content" "$button1_text" "$complete_action"
   else
     termux-notification \
+      "${channel_args[@]}" \
       --id "$notification_id" \
       --title "$title" \
       --content "$content" \
@@ -798,7 +928,12 @@ fi
 
 if [[ "$DRY_RUN" != "1" && "$GROUP_SUMMARY_ENABLED" == "1" ]]; then
   if [[ "$window_count" -gt 0 ]]; then
+    summary_channel_args=()
+    if [[ "$CHANNELS_ACTIVE" == "1" ]]; then
+      summary_channel_args=(--channel "$EXECUTION_NOTIFICATION_CHANNEL")
+    fi
     termux-notification \
+      "${summary_channel_args[@]}" \
       --id "$EXECUTION_GROUP_SUMMARY_ID" \
       --title "Taskwarrior TNT window" \
       --content "$window_count task notification(s)" \
@@ -810,7 +945,12 @@ if [[ "$DRY_RUN" != "1" && "$GROUP_SUMMARY_ENABLED" == "1" ]]; then
   fi
 
   if [[ "$overdue_count" -gt 0 ]]; then
+    summary_channel_args=()
+    if [[ "$CHANNELS_ACTIVE" == "1" ]]; then
+      summary_channel_args=(--channel "$OVERDUE_NOTIFICATION_CHANNEL")
+    fi
     termux-notification \
+      "${summary_channel_args[@]}" \
       --id "$OVERDUE_GROUP_SUMMARY_ID" \
       --title "Taskwarrior TNT overdue" \
       --content "$overdue_count overdue task notification(s)" \

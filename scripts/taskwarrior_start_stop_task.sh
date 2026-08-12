@@ -44,6 +44,7 @@ done
 
 ACTION="${1:-}"
 TASK_UUID="${2:-}"
+NOTIFICATION_ID="${3:-}"
 TASK_BIN="${TASK_BIN:-task}"
 NOTIFY_SCRIPT="${TW_NOTIFY_SCRIPT:-$HOME/.termux/tasker/taskwarrior_notify_due_tasks.sh}"
 JOT_TIMELOG_ENABLED="${TW_JOT_TIMELOG_ENABLED:-1}"
@@ -54,6 +55,7 @@ ACTION_TOAST_ENABLED="${TW_ACTION_TOAST_ENABLED:-1}"
 PROMOTE_STARTED_ON_START="${TW_PROMOTE_STARTED_ON_START:-1}"
 COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
+STATE_FILE="$STATE_DIR/active-notifications"
 JOT_STATUS="off"
 TASK_SHORT_ID="${TASK_UUID%%-*}"
 ACTIVE_STARTED_EPOCH=""
@@ -110,45 +112,6 @@ run_jot_command() {
   esac
 }
 
-task_start_epoch() {
-  local output
-  if output="$("$TASK_BIN" rc.hooks:off rc.verbose:nothing rc.json.array:on "$TASK_UUID" export 2>/dev/null)"; then
-    python3 - "$output" <<'PY'
-import json
-import sys
-from datetime import datetime, timezone
-
-try:
-    tasks = json.loads(sys.argv[1] or "[]")
-except json.JSONDecodeError:
-    raise SystemExit(1)
-
-if not tasks:
-    raise SystemExit(1)
-
-start = tasks[0].get("start")
-if not start:
-    raise SystemExit(1)
-
-for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
-    try:
-        parsed = datetime.strptime(start, fmt)
-    except ValueError:
-        continue
-    if start.endswith("Z"):
-        parsed = parsed.replace(tzinfo=timezone.utc).astimezone()
-    else:
-        parsed = parsed.astimezone()
-    print(int(parsed.timestamp()))
-    raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-  else
-    return 1
-  fi
-}
-
 format_duration() {
   python3 - "$1" <<'PY'
 import sys
@@ -190,6 +153,33 @@ fi
 tnt_acquire_state_lock "$STATE_DIR"
 trap tnt_release_state_lock EXIT
 
+clear_stale_notification() {
+  if [[ -n "$NOTIFICATION_ID" ]] && command -v termux-notification-remove >/dev/null 2>&1; then
+    termux-notification-remove "$NOTIFICATION_ID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$NOTIFICATION_ID" ]]; then
+    tnt_remove_manifest_id "$STATE_FILE" "$NOTIFICATION_ID"
+  fi
+}
+
+if ! tnt_load_task_snapshot "$TASK_BIN" "$TASK_UUID"; then
+  log_action "ERROR task inspection failed action=$ACTION uuid=$TASK_UUID output=$TNT_TASK_SNAPSHOT_ERROR"
+  show_toast "$TASK_SHORT_ID $ACTION failed; inspect error"
+  echo "ERROR: could not inspect task: $TNT_TASK_SNAPSHOT_ERROR"
+  exit 2
+fi
+
+if [[ "$TNT_TASK_STATUS" != "pending" ]]; then
+  clear_stale_notification
+  log_action "ACK stale $ACTION action uuid=$TASK_UUID status=$TNT_TASK_STATUS"
+  if [[ "$TNT_TASK_STATUS" == "completed" ]]; then
+    show_toast "$TASK_SHORT_ID already completed; reminder cleared"
+  else
+    show_toast "$TASK_SHORT_ID no longer pending; reminder cleared"
+  fi
+  exit 0
+fi
+
 run_task_action() {
   local action="$1"
   local output rc
@@ -229,21 +219,29 @@ run_jot_timelog() {
   fi
 }
 
+ACTION_RESULT=""
 case "$ACTION" in
   start)
-    run_task_action start
-    run_jot_timelog start
-    message="Task started"
+    if [[ -n "$TNT_TASK_START_EPOCH" ]]; then
+      ACTION_RESULT="already active"
+      log_action "ACK task already active uuid=$TASK_UUID"
+    else
+      run_task_action start
+      run_jot_timelog start
+      ACTION_RESULT="started"
+    fi
     ;;
   stop)
-    if ACTIVE_STARTED_EPOCH="$(task_start_epoch)"; then
-      ACTIVE_DURATION="$(format_duration "$ACTIVE_STARTED_EPOCH" 2>/dev/null || true)"
+    ACTIVE_STARTED_EPOCH="$TNT_TASK_START_EPOCH"
+    if [[ -z "$ACTIVE_STARTED_EPOCH" ]]; then
+      ACTION_RESULT="already stopped"
+      log_action "ACK task already stopped uuid=$TASK_UUID"
     else
-      ACTIVE_STARTED_EPOCH=""
+      ACTIVE_DURATION="$(format_duration "$ACTIVE_STARTED_EPOCH" 2>/dev/null || true)"
+      run_task_action stop
+      run_jot_timelog stop
+      ACTION_RESULT="stopped"
     fi
-    run_task_action stop
-    run_jot_timelog stop
-    message="Task stopped"
     ;;
   *)
     echo "ERROR: unsupported action: $ACTION"
@@ -252,8 +250,8 @@ case "$ACTION" in
 esac
 
 if command -v termux-toast >/dev/null 2>&1; then
-  toast_message="$TASK_SHORT_ID $ACTION"
-  if [[ "$ACTION" == "stop" && -n "$ACTIVE_DURATION" ]]; then
+  toast_message="$TASK_SHORT_ID $ACTION_RESULT"
+  if [[ "$ACTION_RESULT" == "stopped" && -n "$ACTIVE_DURATION" ]]; then
     toast_message="$toast_message; active $ACTIVE_DURATION"
   fi
   case "$JOT_STATUS" in
