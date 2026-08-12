@@ -1,0 +1,11 @@
+name: Notification problem
+description: Report incorrect, missing, or stale notifications
+title: "[Notification] "
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Include notification output and relevant configuration.
+    validations:
+      required: true

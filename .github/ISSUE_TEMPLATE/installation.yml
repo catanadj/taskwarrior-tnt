@@ -1,0 +1,11 @@
+name: Installation problem
+description: Report a failure installing or upgrading TNT
+title: "[Installation] "
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Include the install command and relevant output.
+    validations:
+      required: true

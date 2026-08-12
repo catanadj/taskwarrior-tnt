@@ -206,8 +206,8 @@ taskwarrior_tnt/
 - [x] Add release notes and semantic version tags.
 - [x] Test installation over an existing configuration.
 - [x] Test clean installation in a fresh Termux environment.
-- [ ] Add a concise upgrade guide for configuration and state migrations.
-- [ ] Add issue templates for installation, notification, and Taskwarrior problems.
+- [x] Add a concise upgrade guide for configuration and state migrations.
+- [x] Add issue templates for installation, notification, and Taskwarrior problems.
 - [x] Keep the README focused on installation and daily use; move internals to dedicated documentation.
 
 ## Recommended Execution Order

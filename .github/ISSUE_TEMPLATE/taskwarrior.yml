@@ -1,0 +1,11 @@
+name: Taskwarrior or action problem
+description: Report a Taskwarrior command or action problem
+title: "[Taskwarrior] "
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Include the task command, action, and relevant log output.
+    validations:
+      required: true
