@@ -34,6 +34,7 @@ from taskwarrior_tnt.state import (
     upsert_snooze,
     write_manifest,
 )
+from taskwarrior_tnt.android import Android, AndroidCommandError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -446,6 +447,30 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual({"uuid-b": 400}, read_snoozes(snoozes, 200))
         remove_snooze(snoozes, "uuid-b")
         self.assertEqual({"uuid-a": 200}, read_snoozes(snoozes, 0))
+
+    def test_android_adapter_builds_termux_api_commands(self) -> None:
+        android = Android(
+            notification_bin=str(self.bin_dir / "termux-notification"),
+            notification_remove_bin=str(self.bin_dir / "termux-notification-remove"),
+            channel_bin=str(self.bin_dir / "termux-notification-channel"),
+            toast_bin=str(self.bin_dir / "termux-toast"),
+            env=self._env(),
+        )
+        android.create_channel("window", "Window")
+        android.notify("--id", "100", "--title", "Task")
+        android.remove_notification("100")
+        android.toast("done")
+        calls = self.calls()
+        self.assertIn("termux-notification-channel window Window", calls)
+        self.assertIn("termux-notification --id 100 --title Task", calls)
+        self.assertIn("termux-notification-remove 100", calls)
+        self.assertIn("termux-toast done", calls)
+
+    def test_android_adapter_reports_termux_api_failure(self) -> None:
+        failing = self.bin_dir / "failing-termux"
+        self._write_executable(failing, "#!/usr/bin/env bash\necho failed >&2\nexit 7\n")
+        with self.assertRaisesRegex(AndroidCommandError, "failed"):
+            Android(notification_bin=str(failing)).notify("--id", "100")
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"

@@ -58,7 +58,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Move window filtering, bucketing, sorting, and limits into `policy.py` for the GUI and notifier.
 - [ ] Move notification manifest, snooze state, and locking into `state.py`.
 - [x] Add typed manifest and snooze file operations in `state.py`.
-- [ ] Move Android notification, channel, removal, and toast calls into `android.py`.
+- [x] Add an Android command adapter in `android.py`.
 - [ ] Move Start, Stop, Done, and Snooze behavior into `actions.py`.
 - [ ] Isolate Jot support behind an integration interface.
 - [ ] Make the notifier and GUI consume the same task-selection and formatting code.

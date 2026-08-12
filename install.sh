@@ -29,6 +29,7 @@ required_python_package_files=(
   taskwarrior_tnt/policy.py
   taskwarrior_tnt/taskwarrior.py
   taskwarrior_tnt/state.py
+  taskwarrior_tnt/android.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
