@@ -253,6 +253,22 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertNotIn("yesterday", notifications)
         self.assertNotIn("tomorrow task", notifications)
 
+    def test_reminder_window_handles_local_midnight_boundary(self) -> None:
+        local_tz = timezone(timedelta(hours=3))
+        now = datetime(2026, 8, 13, 0, 5, tzinfo=local_tz)
+        self.assertEqual(
+            None,
+            reminder_bucket(datetime(2026, 8, 12, 23, 30, tzinfo=local_tz), now, 2, 2),
+        )
+        self.assertEqual(
+            "window",
+            reminder_bucket(datetime(2026, 8, 13, 0, 0, tzinfo=local_tz), now, 2, 2),
+        )
+        self.assertEqual(
+            "window",
+            reminder_bucket(datetime(2026, 8, 13, 1, 0, tzinfo=local_tz), now, 2, 2),
+        )
+
     def test_quiet_hours_skip_notifications(self) -> None:
         self.task(
             "c" * 36,

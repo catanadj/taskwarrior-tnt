@@ -12,20 +12,20 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Pass the notification ID to Start and Stop actions for stale-reminder cleanup.
 - [x] Remove generated `scripts/__pycache__/` files and add Python cache patterns to `.gitignore`.
 - [x] Review the pending diff and rerun all existing verification.
-- [ ] Commit and push the channel and state-aware action changes.
+- [x] Commit and push the channel and state-aware action changes.
 
 ### Completion Criteria
 
-- [ ] A stale `Done` action clears the reminder and reports that the task is already complete.
-- [ ] Start, Stop, Done, and Tomorrow work normally for pending tasks.
+- [x] A stale `Done` action clears the reminder and reports that the task is already complete.
+- [x] Start, Stop, Done, and Tomorrow work normally for pending tasks.
 - [ ] Existing installations continue to work after rerunning `install.sh`.
-- [ ] The repository is clean after verification.
+- [x] The repository is clean after verification.
 
 ## Phase 1: Establish An Automated Safety Net
 
 - [x] Create a `tests/` directory and a reusable fake-command harness.
 - [x] Add fixed-clock tests for reminder-window boundaries.
-- [ ] Test midnight and local-time-zone behavior.
+- [x] Test midnight and local-time-zone behavior.
 - [x] Test ISO 8601 duration parsing and displayed start times.
 - [x] Test active, execution-window, and overdue selection priority.
 - [x] Test `TW_MAX_TASKS` behavior with a large overdue backlog.
@@ -56,7 +56,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Move Taskwarrior export commands into `taskwarrior.py`.
 - [x] Move date, duration, and delta formatting into `formatting.py` for the Python clients.
 - [x] Move window filtering, bucketing, sorting, and limits into `policy.py` for the GUI and notifier.
-- [ ] Move notification manifest, snooze state, and locking into `state.py`.
+- [x] Move notification manifest, snooze state, and locking into `state.py`.
 - [x] Add typed manifest and snooze file operations in `state.py`.
 - [x] Add the shared state-lock implementation in `state.py`.
 - [x] Add an Android command adapter in `android.py`.
@@ -72,7 +72,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Retire the action-script duration-formatting heredocs.
 - [x] Retire the snooze-deadline and quiet-hours heredocs.
 - [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
-- [ ] Preserve current behavior through characterization tests during extraction.
+- [x] Preserve current behavior through characterization tests during extraction.
 
 ### Proposed Package Layout
 
@@ -135,9 +135,9 @@ taskwarrior_tnt/
 
 ### Completion Criteria
 
-- [ ] Invalid values are rejected before a scan changes notifications.
+- [x] Invalid values are rejected before a scan changes notifications.
 - [ ] Upgrades do not silently overwrite user configuration.
-- [ ] State from the current release migrates without orphaning notifications or snoozes.
+- [x] State from the current release migrates without orphaning notifications or snoozes.
 
 ## Phase 5: Improve Daily Use
 
