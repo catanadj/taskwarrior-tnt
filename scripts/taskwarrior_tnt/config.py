@@ -47,6 +47,17 @@ def validate(values: dict[str, str]) -> list[str]:
             errors.append("TW_COMMAND_TIMEOUT_SECONDS must be positive")
     except ValueError:
         errors.append("TW_COMMAND_TIMEOUT_SECONDS must be numeric")
+    try:
+        if float(values.get("TW_SYNC_TIMEOUT_SECONDS", "300")) <= 0:
+            errors.append("TW_SYNC_TIMEOUT_SECONDS must be positive")
+    except ValueError:
+        errors.append("TW_SYNC_TIMEOUT_SECONDS must be numeric")
+    if values.get("TW_SYNC_BEFORE_SCAN_ENABLED", "0") not in {"0", "1"}:
+        errors.append("TW_SYNC_BEFORE_SCAN_ENABLED must be 0 or 1")
+    if values.get("TW_SYNC_BEFORE_SCAN_ENABLED", "0") == "1" and not values.get(
+        "TW_SYNC_SCRIPT", ""
+    ).strip():
+        errors.append("TW_SYNC_SCRIPT must not be empty when pre-scan sync is enabled")
     time_pattern = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     for key in ("TW_QUIET_HOURS_START", "TW_QUIET_HOURS_END"):
         if not time_pattern.match(values.get(key, "22:00" if key.endswith("START") else "07:00")):

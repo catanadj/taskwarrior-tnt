@@ -66,6 +66,10 @@ for config_name in \
   TASK_BIN \
   TW_TASK_FILTER \
   TW_COMMAND_TIMEOUT_SECONDS \
+  TW_SYNC_BEFORE_SCAN_ENABLED \
+  TW_SYNC_SCRIPT \
+  TW_SYNC_TIMEOUT_SECONDS \
+  TW_SYNC_LOG_FILE \
   TW_INCLUDE_PROJECTS \
   TW_EXCLUDE_PROJECTS \
   TW_INCLUDE_TAGS \
@@ -122,6 +126,10 @@ for config_name in \
   TASK_BIN \
   TW_TASK_FILTER \
   TW_COMMAND_TIMEOUT_SECONDS \
+  TW_SYNC_BEFORE_SCAN_ENABLED \
+  TW_SYNC_SCRIPT \
+  TW_SYNC_TIMEOUT_SECONDS \
+  TW_SYNC_LOG_FILE \
   TW_INCLUDE_PROJECTS \
   TW_EXCLUDE_PROJECTS \
   TW_INCLUDE_TAGS \
@@ -179,6 +187,10 @@ JOT_TIMELOG_ENABLED="${TW_JOT_TIMELOG_ENABLED:-1}"
 JOT_BIN="${JOT_BIN:-jot}"
 COMMON_SCRIPT="${TW_COMMON_SCRIPT:-$(dirname "$0")/taskwarrior_tnt_common.sh}"
 STATE_DIR="${TW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/taskwarrior-tnt}"
+SYNC_BEFORE_SCAN_ENABLED="${TW_SYNC_BEFORE_SCAN_ENABLED:-0}"
+SYNC_SCRIPT="${TW_SYNC_SCRIPT:-}"
+SYNC_TIMEOUT_SECONDS="${TW_SYNC_TIMEOUT_SECONDS:-300}"
+SYNC_LOG_FILE="${TW_SYNC_LOG_FILE:-$STATE_DIR/pre-scan-sync.log}"
 STATE_FILE="$STATE_DIR/active-notifications"
 SNOOZE_FILE="$STATE_DIR/snoozed-tasks"
 CHANNEL_STATE_FILE="$STATE_DIR/notification-channels"
@@ -372,6 +384,32 @@ doctor_check_executable() {
   fi
 }
 
+run_pre_scan_sync() {
+  local output rc summary
+
+  if [[ "$SYNC_BEFORE_SCAN_ENABLED" != "1" || "$DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  mkdir -p "$STATE_DIR" "$(dirname "$SYNC_LOG_FILE")"
+  if output="$(python3 -m taskwarrior_tnt.prescan "$SYNC_SCRIPT" "$SYNC_TIMEOUT_SECONDS" 2>&1)"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  {
+    printf '%s rc=%s script=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$rc" "$SYNC_SCRIPT"
+    printf '%s\n' "$output"
+  } > "$SYNC_LOG_FILE"
+  if [[ "$rc" == "0" ]]; then
+    echo "Pre-scan sync completed."
+    return 0
+  fi
+  summary="${output//$'\n'/; }"
+  summary="${summary:0:300}"
+  echo "WARN: pre-scan sync failed (rc=$rc); continuing with local tasks${summary:+: $summary}" >&2
+  return 0
+}
+
 run_doctor() {
   echo "Taskwarrior TNT doctor"
   echo
@@ -388,6 +426,11 @@ run_doctor() {
   echo "Channels: enabled=$NOTIFICATION_CHANNELS_ENABLED window=$EXECUTION_NOTIFICATION_CHANNEL overdue=$OVERDUE_NOTIFICATION_CHANNEL active=$STARTED_NOTIFICATION_CHANNEL"
   echo "Icons: window=$EXECUTION_NOTIFICATION_ICON overdue=$OVERDUE_NOTIFICATION_ICON started=$STARTED_NOTIFICATION_ICON"
   echo "Priority: default=$NOTIFICATION_PRIORITY started=$STARTED_NOTIFICATION_PRIORITY"
+  echo "Pre-scan sync: enabled=$SYNC_BEFORE_SCAN_ENABLED timeout=${SYNC_TIMEOUT_SECONDS}s"
+  if [[ "$SYNC_BEFORE_SCAN_ENABLED" == "1" ]]; then
+    doctor_check_executable "sync helper" "$SYNC_SCRIPT"
+    echo "Pre-scan sync log: $SYNC_LOG_FILE"
+  fi
   if [[ "$NOTIFICATION_CHANNELS_ENABLED" != "1" ]]; then
     echo "Channel setup: disabled"
   elif [[ -f "$CHANNEL_STATE_FILE" ]] && IFS= read -r doctor_channel_signature < "$CHANNEL_STATE_FILE" &&
@@ -474,6 +517,8 @@ if [[ "$DOCTOR_MODE" == "1" ]]; then
   run_doctor
   exit 0
 fi
+
+run_pre_scan_sync
 
 mkdir -p "$STATE_DIR"
 tnt_acquire_state_lock "$STATE_DIR"

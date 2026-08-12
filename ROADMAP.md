@@ -166,6 +166,7 @@ taskwarrior_tnt/
 
 ### Health And Refresh
 
+- [x] Add an optional pre-scan sync/reconcile helper with timeout and logging.
 - [ ] Record the last successful scan, duration, task counts, and last error.
 - [x] Make `tnt status` show the next eligible reminder and current channel state.
 - [ ] Add a health notification after repeated scan failures without spamming every cycle.

@@ -41,6 +41,7 @@ required_python_package_files=(
   taskwarrior_tnt/cli.py
   taskwarrior_tnt/config.py
   taskwarrior_tnt/nautical_progress.py
+  taskwarrior_tnt/prescan.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then

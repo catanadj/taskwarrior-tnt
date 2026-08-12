@@ -336,6 +336,49 @@ class SchedulerService:
         self.assertIn("Quiet hours active", result.stdout)
         self.assertFalse(any(line.startswith("termux-notification ") for line in self.calls()))
 
+    def test_pre_scan_sync_runs_before_notification_scan(self) -> None:
+        sync_script = self.temp_dir / "sync helper.sh"
+        self._write_executable(
+            sync_script,
+            '#!/bin/sh\nprintf \'sync-helper ran\\n\' >> "$TNT_TEST_CALLS"\n',
+        )
+        self.task("5e" * 18, "synced task", FIXED_NOW)
+        result = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_SYNC_BEFORE_SCAN_ENABLED="1",
+            TW_SYNC_SCRIPT=str(sync_script),
+        )
+        self.assertIn("Pre-scan sync completed.", result.stdout)
+        self.assertIn("sync-helper ran", self.calls())
+        self.assertIn("Tracked 1", result.stdout)
+
+    def test_pre_scan_sync_failure_keeps_local_notifications(self) -> None:
+        sync_script = self.temp_dir / "failing-sync.sh"
+        self._write_executable(sync_script, "#!/bin/sh\necho sync unavailable >&2\nexit 7\n")
+        self.task("5f" * 18, "local task", FIXED_NOW)
+        result = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_SYNC_BEFORE_SCAN_ENABLED="1",
+            TW_SYNC_SCRIPT=str(sync_script),
+        )
+        self.assertIn("pre-scan sync failed (rc=7)", result.stderr)
+        self.assertIn("Tracked 1", result.stdout)
+        self.assertIn("rc=7", (self.state_dir / "pre-scan-sync.log").read_text())
+
+    def test_dry_run_does_not_run_pre_scan_sync(self) -> None:
+        sync_script = self.temp_dir / "dry-sync.sh"
+        self._write_executable(
+            sync_script,
+            '#!/bin/sh\nprintf \'sync-helper ran\\n\' >> "$TNT_TEST_CALLS"\n',
+        )
+        self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_DRY_RUN="1",
+            TW_SYNC_BEFORE_SCAN_ENABLED="1",
+            TW_SYNC_SCRIPT=str(sync_script),
+        )
+        self.assertNotIn("sync-helper ran", self.calls())
+
     def test_quiet_hours_crossing_midnight(self) -> None:
         self.task(
             "7" * 36,
@@ -625,6 +668,14 @@ class SchedulerService:
         self.assertIn("TW_MAX_TASKS must be at least 1", errors)
         self.assertIn("TW_QUIET_HOURS_START must use HH:MM", errors)
         self.assertIn("TW_COMMAND_TIMEOUT_SECONDS must be positive", validate({"TW_COMMAND_TIMEOUT_SECONDS": "0"}))
+        sync_errors = validate(
+            {"TW_SYNC_BEFORE_SCAN_ENABLED": "1", "TW_SYNC_TIMEOUT_SECONDS": "0"}
+        )
+        self.assertIn("TW_SYNC_TIMEOUT_SECONDS must be positive", sync_errors)
+        self.assertIn(
+            "TW_SYNC_SCRIPT must not be empty when pre-scan sync is enabled",
+            sync_errors,
+        )
 
     def test_configuration_migration_writes_toml_and_backup(self) -> None:
         source = self.temp_dir / "tasker.conf"

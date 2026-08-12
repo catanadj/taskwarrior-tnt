@@ -48,12 +48,12 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --setup-channels
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --test-notification
 TW_DRY_RUN=1 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh
+```
 
 Tools that sync Taskwarrior can request an immediate live refresh with:
 
 ```sh
 ~/.termux/tasker/tnt refresh
-```
 ```
 
 Launch the optional GUI:
@@ -70,7 +70,8 @@ Create a scheduled Tasker profile, for example every 15 or 30 minutes. In the at
 2. Set `Executable` to `taskwarrior_notify_due_tasks.sh`.
 3. Disable `Execute in a terminal session`.
 4. Enable `Wait for result for commands`.
-5. Use a timeout above zero, for example `10s`.
+5. Use a timeout above zero, for example `10s`. When pre-scan sync is enabled,
+   set it above `TW_SYNC_TIMEOUT_SECONDS`, for example `330s` for the default.
 
 No separate Tasker `Notify` action is needed. The script posts notifications directly through Termux:API.
 
@@ -93,6 +94,10 @@ TW_MAX_TASKS=12
 TW_REORDER_EACH_RUN=0
 TW_ALWAYS_SHOW_ACTIVE=0
 TW_COMMAND_TIMEOUT_SECONDS=30
+
+TW_SYNC_BEFORE_SCAN_ENABLED=0
+TW_SYNC_SCRIPT="/path/to/taskwarrior-sync-helper/task_sync.sh"
+TW_SYNC_TIMEOUT_SECONDS=300
 
 # Optional eligibility rules. Lists are comma-separated.
 TW_TASK_FILTER=""
@@ -128,6 +133,12 @@ JOT_BIN=/data/data/com.termux/files/usr/bin/jot
 JOT_RUNNER=
 TW_ACTION_TOAST_ENABLED=1
 ```
+
+When pre-scan sync is enabled, TNT runs the configured helper before reading
+Taskwarrior and before acquiring its notification-state lock. Output is written
+to `pre-scan-sync.log` under `TW_STATE_DIR`. A failed or timed-out sync is
+reported, but TNT continues with local task data so reminders remain available
+during network outages. Dry runs and diagnostic commands do not trigger sync.
 
 Notes:
 
