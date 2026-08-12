@@ -120,10 +120,10 @@ taskwarrior_tnt/
 ## Phase 4: Modernize Configuration And State
 
 - [x] Add validation for the existing shell configuration schema.
-- [ ] Add a versioned TOML configuration file.
-- [ ] Support importing the existing shell configuration.
+- [x] Add a versioned TOML configuration file.
+- [x] Support importing the existing shell configuration.
 - [x] Add `tnt config check` with actionable validation errors.
-- [ ] Add `tnt config migrate` with backup creation.
+- [x] Add `tnt config migrate` with backup creation.
 - [x] Add `tnt config migrate` with backup creation.
 - [ ] Replace tab-separated state files with versioned JSON state.
 - [x] Add versioned JSON state migration while retaining legacy files.
@@ -147,7 +147,7 @@ taskwarrior_tnt/
 - [x] Add `TW_ALWAYS_SHOW_ACTIVE` support for active tasks outside the normal window.
 - [x] Add an optional ongoing notification for active tasks.
 - [x] Display current active duration where Android allows useful refresh behavior.
-- [ ] Keep active tasks ahead of normal reminders without disrupting their channel settings.
+- [x] Keep active tasks ahead of normal reminders without disrupting their channel settings.
 
 ### Filtering And Policies
 
@@ -175,15 +175,15 @@ taskwarrior_tnt/
 
 ## Phase 6: Make The GUI A Control Center
 
-- [ ] Remove duplicated selection and formatting logic by consuming the shared core.
+- [x] Remove duplicated selection and formatting logic by consuming the shared core.
 - [x] Present separate Active, Now, Soon, and Overdue sections.
-- [ ] Add project and tag filtering.
-- [ ] Add task details without turning each row into a wall of text.
-- [ ] Keep actions contextual to the selected task.
-- [ ] Add manual refresh with visible loading and failure states.
+- [x] Add project and tag filtering.
+- [x] Add task details without turning each row into a wall of text.
+- [x] Keep actions contextual to the selected task.
+- [x] Add manual refresh with visible loading and failure states.
 - [ ] Show health information from `tnt status`.
 - [ ] Show channel setup status and provide a setup action.
-- [ ] Keep startup fast through a versioned shared cache.
+- [x] Keep startup fast through a versioned shared cache.
 
 ### Completion Criteria
 
@@ -196,8 +196,8 @@ taskwarrior_tnt/
 - [ ] Replace Jot-specific branching in action scripts with an integration adapter.
 - [ ] Define lifecycle events such as `task_started`, `task_stopped`, and `task_completed`.
 - [ ] Give integrations a stable environment, timeout, logging, and failure policy.
-- [ ] Keep Taskwarrior hooks disabled in Android notification actions.
-- [ ] Keep integration failures from undoing successful Taskwarrior actions.
+- [x] Keep Taskwarrior hooks disabled in Android notification actions.
+- [x] Keep integration failures from undoing successful Taskwarrior actions.
 - [ ] Document how external tools can consume lifecycle events safely.
 
 ## Phase 8: Release And Maintenance Quality
