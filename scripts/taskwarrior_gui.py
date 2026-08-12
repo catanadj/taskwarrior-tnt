@@ -19,6 +19,7 @@ from taskwarrior_tnt.formatting import (
     parse_task_date,
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
+from taskwarrior_tnt.models import Reminder as TaskRow
 
 try:
     import termuxgui as tg
@@ -59,18 +60,6 @@ class Config:
         "~/.local/state/taskwarrior-tnt/gui-cache.json"
     )
     gui_cache_max_age_seconds: int = 900
-
-
-@dataclass
-class TaskRow:
-    bucket: str
-    uuid: str
-    title: str
-    content: str
-    action: str
-    button: str
-    due: datetime
-    urgency: float
 
 
 def load_config(path: str) -> Config:

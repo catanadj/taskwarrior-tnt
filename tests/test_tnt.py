@@ -23,6 +23,7 @@ from taskwarrior_tnt.formatting import (
     parse_task_date,
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
+from taskwarrior_tnt.models import Reminder, TaskRecord
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -385,6 +386,15 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
             active_key=lambda record: record["name"] == "active",
         )
         self.assertEqual(["active", "window"], [record["name"] for record in selected])
+
+    def test_shared_domain_models_are_typed_and_immutable(self) -> None:
+        task = TaskRecord("abc", FIXED_NOW, tags=("next",), started=True)
+        reminder = Reminder("window", task.uuid, "title", "content", "start", "Start", task.due)
+        self.assertTrue(task.started)
+        self.assertEqual(("next",), task.tags)
+        self.assertEqual("window", reminder.bucket)
+        with self.assertRaises(AttributeError):
+            task.uuid = "changed"  # type: ignore[misc]
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"

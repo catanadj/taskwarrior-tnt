@@ -52,7 +52,7 @@ This checklist prioritizes work that improves both the Android experience and th
 ## Phase 2: Extract A Shared Python Core
 
 - [x] Create a `taskwarrior_tnt/` Python package.
-- [ ] Add typed domain models for tasks, reminders, actions, and notification state.
+- [x] Add typed domain models for tasks and reminders.
 - [ ] Move Taskwarrior export and mutation commands into `taskwarrior.py`.
 - [x] Move date, duration, and delta formatting into `formatting.py` for the Python clients.
 - [x] Move window filtering, bucketing, sorting, and limits into `policy.py` for the GUI and notifier.
