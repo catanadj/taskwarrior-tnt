@@ -168,6 +168,8 @@ CHANNELS_ACTIVE=0
 CHANNEL_SIGNATURE="$EXECUTION_NOTIFICATION_CHANNEL|$EXECUTION_NOTIFICATION_CHANNEL_NAME|$OVERDUE_NOTIFICATION_CHANNEL|$OVERDUE_NOTIFICATION_CHANNEL_NAME|$STARTED_NOTIFICATION_CHANNEL|$STARTED_NOTIFICATION_CHANNEL_NAME"
 NOTIFICATION_CONFIG_SIGNATURE="schema=2|$EXECUTION_NOTIFICATION_GROUP|$OVERDUE_NOTIFICATION_GROUP|$EXECUTION_NOTIFICATION_ICON|$OVERDUE_NOTIFICATION_ICON|$STARTED_NOTIFICATION_ICON|$NOTIFICATION_CHANNELS_ENABLED|$CHANNEL_SIGNATURE|$NOTIFICATION_PRIORITY|$STARTED_NOTIFICATION_PRIORITY|$COMPLETE_SCRIPT|$FORGET_SCRIPT|$SNOOZE_SCRIPT|$START_STOP_SCRIPT|$START_STOP_ACTION_ENABLED"
 export TASK_BIN
+SCRIPT_DIR="$(dirname "$0")"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 if [[ ! -r "$COMMON_SCRIPT" ]]; then
   echo "ERROR: shared helper is missing: $COMMON_SCRIPT"
@@ -509,67 +511,15 @@ if ! python3 - "$WINDOW_PAST_HOURS" "$WINDOW_FUTURE_HOURS" "$MAX_TASKS" "$SNOOZE
 import hashlib
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
-
-
-def parse_task_date(value):
-    if not value:
-        return None
-    for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
-        try:
-            parsed = datetime.strptime(value, fmt)
-            if value.endswith("Z"):
-                return parsed.replace(tzinfo=timezone.utc).astimezone()
-            return parsed.astimezone()
-        except ValueError:
-            pass
-    return None
-
-
-def clean_text(value):
-    return " ".join(str(value or "").split())
-
-
-def parse_iso_duration(value):
-    if not value:
-        return None
-    match = re.fullmatch(
-        r"P(?:(?P<days>\d+(?:\.\d+)?)D)?"
-        r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
-        r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
-        r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?",
-        str(value).strip(),
-    )
-    if not match:
-        return None
-
-    values = {key: float(value or 0) for key, value in match.groupdict().items()}
-    duration = timedelta(
-        days=values["days"],
-        hours=values["hours"],
-        minutes=values["minutes"],
-        seconds=values["seconds"],
-    )
-    return duration if duration.total_seconds() > 0 else None
-
-
-def format_delta(delta):
-    total_seconds = int(abs(delta.total_seconds()))
-    minutes = max(1, (total_seconds + 59) // 60)
-    hours, remaining_minutes = divmod(minutes, 60)
-    days, remaining_hours = divmod(hours, 24)
-
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if remaining_hours:
-        parts.append(f"{remaining_hours}h")
-    if remaining_minutes and not days:
-        parts.append(f"{remaining_minutes}m")
-    return " ".join(parts) if parts else "0m"
+from taskwarrior_tnt.formatting import (
+    clean_text,
+    format_delta,
+    parse_iso_duration,
+    parse_task_date,
+)
 
 
 def notification_id(uuid, bucket):
