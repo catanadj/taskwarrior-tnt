@@ -27,6 +27,7 @@ required_python_package_files=(
   taskwarrior_tnt/formatting.py
   taskwarrior_tnt/models.py
   taskwarrior_tnt/policy.py
+  taskwarrior_tnt/taskwarrior.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then

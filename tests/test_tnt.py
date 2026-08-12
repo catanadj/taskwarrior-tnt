@@ -24,6 +24,7 @@ from taskwarrior_tnt.formatting import (
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder, TaskRecord
+from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,7 @@ class TntHarness(unittest.TestCase):
         self.state_dir = self.temp_dir / "state"
         self.bin_dir.mkdir()
         self.calls_file = self.temp_dir / "calls.log"
+        self.export_calls_file = self.temp_dir / "export-calls.log"
         self.task_data: list[dict[str, object]] = []
         self.task_status = "pending"
         self.task_started = False
@@ -69,6 +71,8 @@ import os
 import sys
 
 if "export" in sys.argv:
+    with open(os.environ["TNT_TEST_EXPORT_CALLS"], "a", encoding="utf-8") as handle:
+        handle.write("task " + " ".join(sys.argv[1:]) + "\\n")
     uuid = os.environ.get("TNT_TEST_UUID", "11111111-1111-1111-1111-111111111111")
     status = os.environ.get("TNT_TEST_STATUS", "pending")
     started = os.environ.get("TNT_TEST_STARTED", "0") == "1"
@@ -112,6 +116,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
             {
                 "PATH": f"{self.bin_dir}:{env.get('PATH', '')}",
                 "TNT_TEST_CALLS": str(self.calls_file),
+                "TNT_TEST_EXPORT_CALLS": str(self.export_calls_file),
                 "TNT_TEST_TASKS": task_json,
                 "TNT_TEST_STATUS": self.task_status,
                 "TNT_TEST_STARTED": "1" if self.task_started else "0",
@@ -395,6 +400,25 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual("window", reminder.bucket)
         with self.assertRaises(AttributeError):
             task.uuid = "changed"  # type: ignore[misc]
+
+    def test_taskwarrior_adapter_exports_pending_tasks_hookless(self) -> None:
+        uuid = "14141414-0000-0000-0000-000000000000"
+        self.task(uuid, "adapter task", FIXED_NOW + timedelta(minutes=30))
+        environment = self._env()
+        tasks = export_pending(
+            str(self.bin_dir / "task"), FIXED_NOW, 2, env=environment
+        )
+        self.assertEqual(uuid, tasks[0]["uuid"])
+        self.assertIn("rc.hooks:off", self.export_calls_file.read_text())
+
+    def test_taskwarrior_adapter_reports_invalid_export(self) -> None:
+        bad_task = self.bin_dir / "bad-task"
+        self._write_executable(
+            bad_task,
+            "#!/usr/bin/env bash\nprintf 'not json'\n",
+        )
+        with self.assertRaisesRegex(TaskwarriorCommandError, "valid JSON"):
+            export_pending(str(bad_task), FIXED_NOW, 2)
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"

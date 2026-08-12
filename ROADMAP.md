@@ -53,7 +53,7 @@ This checklist prioritizes work that improves both the Android experience and th
 
 - [x] Create a `taskwarrior_tnt/` Python package.
 - [x] Add typed domain models for tasks and reminders.
-- [ ] Move Taskwarrior export and mutation commands into `taskwarrior.py`.
+- [x] Move Taskwarrior export commands into `taskwarrior.py`.
 - [x] Move date, duration, and delta formatting into `formatting.py` for the Python clients.
 - [x] Move window filtering, bucketing, sorting, and limits into `policy.py` for the GUI and notifier.
 - [ ] Move notification manifest, snooze state, and locking into `state.py`.

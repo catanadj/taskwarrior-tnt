@@ -20,6 +20,7 @@ from taskwarrior_tnt.formatting import (
 )
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder as TaskRow
+from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
 
 try:
     import termuxgui as tg
@@ -140,41 +141,6 @@ def read_snoozed(state_dir: str) -> set[str]:
     return snoozed
 
 
-def task_export(config: Config, now: datetime) -> subprocess.CompletedProcess[str]:
-    end = now + timedelta(hours=config.future_hours)
-    filtered = [
-        config.task_bin,
-        "rc.hooks:off",
-        "rc.verbose:nothing",
-        "rc.json.array:on",
-        "status:pending",
-        f"due.before:{end.strftime('%Y%m%dT%H%M%S')}",
-        "export",
-    ]
-    result = subprocess.run(
-        filtered,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        return result
-
-    return subprocess.run(
-        [
-            config.task_bin,
-            "rc.hooks:off",
-            "rc.verbose:nothing",
-            "rc.json.array:on",
-            "status:pending",
-            "export",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
 def taskrow_from_cache(item: dict[str, Any]) -> TaskRow | None:
     due = parse_task_date(clean_text(item.get("due")))
     if due is None:
@@ -251,14 +217,10 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
         return cached_rows, f"{len(cached_rows)} task(s) from cache"
 
     now = datetime.now().astimezone()
-    result = task_export(config, now)
-    if result.returncode != 0:
-        return [], clean_text(result.stderr or result.stdout or "task export failed")
-
     try:
-        tasks = json.loads(result.stdout or "[]")
-    except json.JSONDecodeError as exc:
-        return [], f"task export did not return JSON: {exc}"
+        tasks = export_pending(config.task_bin, now, config.future_hours)
+    except TaskwarriorCommandError as exc:
+        return [], str(exc)
 
     snoozed = read_snoozed(config.state_dir)
 
