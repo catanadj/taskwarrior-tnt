@@ -18,7 +18,7 @@ from taskwarrior_tnt.formatting import (
     parse_iso_duration,
     parse_task_date,
 )
-from taskwarrior_tnt.policy import reminder_bucket, select_priority
+from taskwarrior_tnt.reminders import build_reminders
 from taskwarrior_tnt.models import Reminder as TaskRow
 from taskwarrior_tnt.taskwarrior import (
     TaskwarriorCommandError,
@@ -221,76 +221,13 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
 
     snoozed = read_snoozed(config.state_dir)
 
-    rows: list[TaskRow] = []
-    for task in tasks:
-        uuid = task.uuid
-        due = task.due
-        if not uuid or not due or uuid in snoozed:
-            continue
-
-        bucket = reminder_bucket(due, now, config.past_hours, config.future_hours)
-        if bucket is None:
-            continue
-        description = task.description or uuid[:8]
-        project = task.project
-        tags = task.tags
-        duration = task.duration
-        urgency = task.urgency
-        is_started = task.started
-        action = "stop" if is_started else "start"
-        button = "Stop" if is_started else "Start"
-
-        if duration:
-            start_time = due - duration
-            time_text = f"{start_time.strftime('%H:%M')} - {due.strftime('%H:%M')}"
-        else:
-            start_time = due
-            time_text = f"Due {due.strftime('%H:%M')}"
-
-        if bucket == "overdue":
-            status = "OVERDUE"
-        elif now < start_time:
-            status = "SOON"
-        elif now <= due:
-            status = "NOW"
-        else:
-            status = "DUE"
-        if is_started:
-            status = "ACTIVE"
-
-        if now < start_time:
-            delta = f"starts in {format_delta(start_time - now)}"
-        elif now > due:
-            delta = f"due {format_delta(now - due)} ago"
-        else:
-            delta = f"due in {format_delta(due - now)}"
-
-        details = [status, delta]
-        if project:
-            details.append(project)
-        if tags:
-            details.append("+" + " +".join(tags[:3]))
-
-        rows.append(
-            TaskRow(
-                bucket=bucket,
-                uuid=uuid,
-                title=f"{time_text} | {description}",
-                content=" | ".join(details),
-                action=action,
-                button=button,
-                due=due,
-                urgency=urgency,
-            )
-        )
-
-    rows = select_priority(
-        rows,
+    rows = build_reminders(
+        tasks,
+        now,
+        config.past_hours,
+        config.future_hours,
         config.max_tasks,
-        due_key=lambda row: row.due,
-        urgency_key=lambda row: row.urgency,
-        bucket_key=lambda row: row.bucket,
-        active_key=lambda row: row.action == "stop",
+        snoozed,
     )
     write_task_cache(config, rows)
     return rows, ""

@@ -42,6 +42,7 @@ from taskwarrior_tnt.state import (
 from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
 from taskwarrior_tnt.integrations import IntegrationStatus, JotIntegration
+from taskwarrior_tnt.reminders import build_reminders
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -456,6 +457,31 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual(timedelta(minutes=10), task.duration)
         self.assertTrue(task.started)
         self.assertEqual(1, len(normalize_tasks([raw, {"description": "missing due"}])))
+
+    def test_shared_reminder_builder_matches_display_contract(self) -> None:
+        tasks = [
+            TaskRecord(
+                "18181818-0000-0000-0000-000000000000",
+                FIXED_NOW + timedelta(minutes=30),
+                description="planned",
+                project="work",
+                tags=("next",),
+                duration=timedelta(minutes=10),
+            ),
+            TaskRecord(
+                "19191919-0000-0000-0000-000000000000",
+                FIXED_NOW - timedelta(minutes=30),
+                description="active",
+                started=True,
+            ),
+        ]
+        reminders = build_reminders(tasks, FIXED_NOW, 2, 2, 5)
+        self.assertEqual(
+            ["active", "planned"],
+            [item.title.split(" | ")[-1] for item in reminders],
+        )
+        self.assertIn("13:20 - 13:30", reminders[1].title)
+        self.assertIn("SOON", reminders[1].content)
 
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"

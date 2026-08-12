@@ -32,6 +32,7 @@ required_python_package_files=(
   taskwarrior_tnt/android.py
   taskwarrior_tnt/actions.py
   taskwarrior_tnt/integrations.py
+  taskwarrior_tnt/reminders.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
