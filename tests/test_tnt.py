@@ -35,6 +35,7 @@ from taskwarrior_tnt.state import (
     write_manifest,
 )
 from taskwarrior_tnt.android import Android, AndroidCommandError
+from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -471,6 +472,25 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self._write_executable(failing, "#!/usr/bin/env bash\necho failed >&2\nexit 7\n")
         with self.assertRaisesRegex(AndroidCommandError, "failed"):
             Android(notification_bin=str(failing)).notify("--id", "100")
+
+    def test_action_plans_are_hookless_and_state_aware(self) -> None:
+        uuid = "15151515-0000-0000-0000-000000000000"
+        start = plan_task_action("start", uuid, "pending")
+        self.assertEqual(ActionStatus.READY, start.status)
+        self.assertEqual(
+            ("rc.hooks:off", "rc.confirmation:no", uuid, "start"), start.task_args
+        )
+        self.assertEqual(
+            ActionStatus.ALREADY_SATISFIED,
+            plan_task_action("start", uuid, "pending", started=True).status,
+        )
+        self.assertEqual(
+            ActionStatus.STALE,
+            plan_task_action("done", uuid, "completed").status,
+        )
+        modify = plan_due_modifier(uuid, "due:due+1d", "pending")
+        self.assertEqual("modify", modify.action)
+        self.assertEqual("due:due+1d", modify.task_args[-1])
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"

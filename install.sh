@@ -30,6 +30,7 @@ required_python_package_files=(
   taskwarrior_tnt/taskwarrior.py
   taskwarrior_tnt/state.py
   taskwarrior_tnt/android.py
+  taskwarrior_tnt/actions.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
