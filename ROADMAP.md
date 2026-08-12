@@ -34,7 +34,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Test local snooze creation and expiry.
 - [x] Test tomorrow snooze due-date modification and stale snooze removal.
 - [x] Test snooze replacement.
-- [ ] Test snooze expiry across midnight.
+- [x] Test snooze expiry across midnight.
 - [x] Test notification manifest updates and unchanged-task suppression.
 - [x] Test swipe dismissal followed by restoration on the next scan.
 - [x] Test completed, missing, already-active, and already-stopped action states.
@@ -47,7 +47,7 @@ This checklist prioritizes work that improves both the Android experience and th
 
 - [x] Tests run without Android, Tasker, Termux:API, or a real Taskwarrior database.
 - [x] Time-dependent tests do not use the real clock.
-- [ ] Every current notification action has success, stale-state, and failure coverage.
+- [x] Every current notification action has success, stale-state, and failure coverage.
 
 ## Phase 2: Extract A Shared Python Core
 

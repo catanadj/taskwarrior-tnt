@@ -383,6 +383,92 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertIn("termux-toast " + uuid[:8] + " already active", calls)
         self.assertIn("termux-toast " + uuid[:8] + " already stopped", calls)
 
+    def test_snooze_expires_across_midnight(self) -> None:
+        uuid = "55555555-0000-0000-0000-000000000000"
+        local_tz = timezone(timedelta(hours=3))
+        self.task(uuid, "midnight snooze", datetime(2026, 8, 13, 0, 15, tzinfo=local_tz))
+
+        self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "765436",
+            "1h",
+            TW_TEST_NOW="2026-08-12T23:30:00+03:00",
+        )
+        before = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-13T00:15:00+03:00",
+        )
+        self.assertIn("Tracked 0", before.stdout)
+
+        after = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-13T00:31:00+03:00",
+        )
+        self.assertIn("Tracked 1", after.stdout)
+
+    def test_pending_actions_complete_start_and_stop_tasks(self) -> None:
+        done_uuid = "44444444-0000-0000-0000-000000000000"
+        self.task_data = [{"uuid": done_uuid, "status": "pending"}]
+        self.run_script("taskwarrior_complete_task.sh", done_uuid, "1001")
+        self.assertIn(
+            f"task rc.hooks:off rc.confirmation:no {done_uuid} done", self.calls()
+        )
+
+        start_uuid = "33333333-0000-0000-0000-000000000000"
+        self.calls_file.write_text("")
+        self.task_data = [{"uuid": start_uuid, "status": "pending"}]
+        self.task_started = False
+        self.run_script("taskwarrior_start_stop_task.sh", "start", start_uuid, "1002")
+        self.assertIn(
+            f"task rc.hooks:off rc.confirmation:no {start_uuid} start", self.calls()
+        )
+
+        stop_uuid = "22222222-0000-0000-0000-000000000000"
+        self.calls_file.write_text("")
+        self.task_data = [{"uuid": stop_uuid, "status": "pending"}]
+        self.task_started = True
+        self.run_script("taskwarrior_start_stop_task.sh", "stop", stop_uuid, "1003")
+        self.assertIn(
+            f"task rc.hooks:off rc.confirmation:no {stop_uuid} stop", self.calls()
+        )
+
+    def test_stale_start_and_stop_actions_clear_notifications(self) -> None:
+        uuid = "12121212-0000-0000-0000-000000000000"
+        self.task_status = "deleted"
+        self.run_script("taskwarrior_start_stop_task.sh", "start", uuid, "2001")
+        self.run_script("taskwarrior_start_stop_task.sh", "stop", uuid, "2002")
+        calls = self.calls()
+        self.assertFalse(any(line.startswith("task ") for line in calls))
+        self.assertIn("termux-notification-remove 2001", calls)
+        self.assertIn("termux-notification-remove 2002", calls)
+
+    def test_start_stop_and_modify_snooze_failures_are_reported(self) -> None:
+        uuid = "13131313-0000-0000-0000-000000000000"
+        self.task_data = [{"uuid": uuid, "status": "pending"}]
+        failed_start = self.run_script(
+            "taskwarrior_start_stop_task.sh",
+            "start",
+            uuid,
+            "3001",
+            check=False,
+            TNT_TEST_ACTION_FAIL="1",
+        )
+        self.assertNotEqual(0, failed_start.returncode)
+        self.assertIn("task start failed", failed_start.stdout)
+
+        self.calls_file.write_text("")
+        failed_snooze = self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "3002",
+            "tomorrow",
+            check=False,
+            TNT_TEST_ACTION_FAIL="1",
+        )
+        self.assertNotEqual(0, failed_snooze.returncode)
+        self.assertIn("task snooze failed", failed_snooze.stdout)
+
     def test_snooze_replacement_keeps_one_current_entry(self) -> None:
         uuid = "66666666-0000-0000-0000-000000000000"
         self.task(uuid, "replace snooze", datetime(2026, 8, 12, 15, 0))
