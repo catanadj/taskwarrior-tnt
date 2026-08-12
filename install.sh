@@ -22,6 +22,11 @@ required_files=(
   taskwarrior_gui.py
 )
 
+required_python_package_files=(
+  taskwarrior_tnt/__init__.py
+  taskwarrior_tnt/formatting.py
+)
+
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then
   echo "ERROR: scripts directory not found: $SOURCE_DIR/scripts"
   exit 2
@@ -30,6 +35,16 @@ fi
 mkdir -p "$INSTALL_DIR"
 
 for file in "${required_files[@]}"; do
+  if [[ ! -f "$SOURCE_DIR/scripts/$file" ]]; then
+    echo "ERROR: missing source file: scripts/$file"
+    exit 2
+  fi
+  cp "$SOURCE_DIR/scripts/$file" "$INSTALL_DIR/$file"
+  chmod 700 "$INSTALL_DIR/$file"
+done
+
+mkdir -p "$INSTALL_DIR/taskwarrior_tnt"
+for file in "${required_python_package_files[@]}"; do
   if [[ ! -f "$SOURCE_DIR/scripts/$file" ]]; then
     echo "ERROR: missing source file: scripts/$file"
     exit 2
@@ -90,6 +105,9 @@ if [[ "$RUN_CHECKS" == "1" ]]; then
         python3 -m py_compile "$INSTALL_DIR/$file"
         ;;
     esac
+  done
+  for file in "${required_python_package_files[@]}"; do
+    python3 -m py_compile "$INSTALL_DIR/$file"
   done
   bash -n "$CONFIG_FILE"
   echo "OK: syntax checks passed"

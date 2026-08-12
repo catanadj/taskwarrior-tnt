@@ -16,6 +16,13 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from taskwarrior_tnt.formatting import (
+    clean_text,
+    format_delta,
+    parse_iso_duration,
+    parse_task_date,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -351,6 +358,13 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         finally:
             sys.modules.pop("taskwarrior_gui", None)
             sys.modules.pop("termuxgui", None)
+
+    def test_shared_formatting_module_contract(self) -> None:
+        self.assertEqual("a b", clean_text("  a   b  "))
+        self.assertEqual(timedelta(minutes=10), parse_iso_duration("PT10M"))
+        self.assertIsNone(parse_iso_duration("invalid"))
+        self.assertEqual("1h 5m", format_delta(timedelta(hours=1, minutes=5)))
+        self.assertIsNotNone(parse_task_date("20260812T130000Z"))
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"
