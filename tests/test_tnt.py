@@ -453,6 +453,12 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         with self.assertRaisesRegex(TaskwarriorCommandError, "valid JSON"):
             export_pending(str(bad_task), FIXED_NOW, 2)
 
+    def test_taskwarrior_adapter_times_out_hung_export(self) -> None:
+        slow_task = self.bin_dir / "slow-task"
+        self._write_executable(slow_task, "#!/usr/bin/env bash\nsleep 2\n")
+        with self.assertRaisesRegex(TaskwarriorCommandError, "timed out"):
+            export_pending(str(slow_task), FIXED_NOW, 2, timeout_seconds=0.01)
+
     def test_taskwarrior_adapter_normalizes_export_records(self) -> None:
         raw = {
             "uuid": "17171717-0000-0000-0000-000000000000",
@@ -552,6 +558,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         errors = validate({"TW_MAX_TASKS": "0", "TW_QUIET_HOURS_START": "25:00"})
         self.assertIn("TW_MAX_TASKS must be at least 1", errors)
         self.assertIn("TW_QUIET_HOURS_START must use HH:MM", errors)
+        self.assertIn("TW_COMMAND_TIMEOUT_SECONDS must be positive", validate({"TW_COMMAND_TIMEOUT_SECONDS": "0"}))
 
     def test_configuration_migration_writes_toml_and_backup(self) -> None:
         source = self.temp_dir / "tasker.conf"

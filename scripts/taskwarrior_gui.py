@@ -43,6 +43,7 @@ DEFAULT_CONFIG = os.path.expanduser("~/.termux/tasker/taskwarrior_tasker.conf")
 class Config:
     task_bin: str = "task"
     task_filter: str = ""
+    command_timeout_seconds: float = 30
     include_projects: str = ""
     exclude_projects: str = ""
     include_tags: str = ""
@@ -111,6 +112,7 @@ def load_config(path: str) -> Config:
     return Config(
         task_bin=values.get("TASK_BIN", "task"),
         task_filter=values.get("TW_TASK_FILTER", ""),
+        command_timeout_seconds=num("TW_COMMAND_TIMEOUT_SECONDS", 30),
         include_projects=values.get("TW_INCLUDE_PROJECTS", ""),
         exclude_projects=values.get("TW_EXCLUDE_PROJECTS", ""),
         include_tags=values.get("TW_INCLUDE_TAGS", ""),
@@ -237,6 +239,7 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
                 now,
                 config.future_hours,
                 task_filter=config.task_filter,
+                timeout_seconds=config.command_timeout_seconds,
                 )
             ),
             include_projects=config.include_projects,

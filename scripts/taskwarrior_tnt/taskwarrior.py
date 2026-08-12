@@ -22,6 +22,7 @@ def _run_export(
     task_bin: str,
     args: list[str],
     env: Mapping[str, str] | None,
+    timeout_seconds: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [task_bin, *args],
@@ -29,6 +30,7 @@ def _run_export(
         text=True,
         check=False,
         env=dict(env) if env is not None else None,
+        timeout=timeout_seconds,
     )
 
 
@@ -39,6 +41,7 @@ def export_pending(
     *,
     env: Mapping[str, str] | None = None,
     task_filter: str = "",
+    timeout_seconds: float = 30,
 ) -> list[dict[str, object]]:
     """Export pending tasks, preferring a bounded due-date query."""
     end = now + timedelta(hours=future_hours)
@@ -49,13 +52,17 @@ def export_pending(
         "status:pending",
     ]
     filter_args = shlex.split(task_filter) if task_filter.strip() else []
-    result = _run_export(
-        task_bin,
-        [*common, *filter_args, f"due.before:{end.strftime('%Y%m%dT%H%M%S')}", "export"],
-        env,
-    )
+    try:
+        result = _run_export(
+            task_bin,
+            [*common, *filter_args, f"due.before:{end.strftime('%Y%m%dT%H%M%S')}", "export"],
+            env,
+            timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TaskwarriorCommandError(f"task export timed out after {timeout_seconds:g}s") from exc
     if result.returncode != 0:
-        result = _run_export(task_bin, [*common, *filter_args, "export"], env)
+        result = _run_export(task_bin, [*common, *filter_args, "export"], env, timeout_seconds)
     if result.returncode != 0:
         message = " ".join((result.stderr or result.stdout or "").split())
         raise TaskwarriorCommandError(message or "task export failed")
@@ -70,9 +77,12 @@ def export_pending(
 
     # A due-date query omits active tasks without a due date. Fetch those
     # separately so an active task remains visible and actionable.
-    active_result = _run_export(
-        task_bin, [*common, *filter_args, "start.any", "export"], env
-    )
+    try:
+        active_result = _run_export(
+            task_bin, [*common, *filter_args, "start.any", "export"], env, timeout_seconds
+        )
+    except subprocess.TimeoutExpired:
+        active_result = subprocess.CompletedProcess([], 124, "", "")
     if active_result.returncode == 0:
         try:
             active_payload = json.loads(active_result.stdout or "[]")

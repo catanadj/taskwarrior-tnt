@@ -42,6 +42,11 @@ def validate(values: dict[str, str]) -> list[str]:
             errors.append("TW_MAX_TASKS must be at least 1")
     except ValueError:
         errors.append("TW_MAX_TASKS must be an integer")
+    try:
+        if float(values.get("TW_COMMAND_TIMEOUT_SECONDS", "30")) <= 0:
+            errors.append("TW_COMMAND_TIMEOUT_SECONDS must be positive")
+    except ValueError:
+        errors.append("TW_COMMAND_TIMEOUT_SECONDS must be numeric")
     time_pattern = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     for key in ("TW_QUIET_HOURS_START", "TW_QUIET_HOURS_END"):
         if not time_pattern.match(values.get(key, "22:00" if key.endswith("START") else "07:00")):

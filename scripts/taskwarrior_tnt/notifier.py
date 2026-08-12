@@ -45,7 +45,8 @@ def generate_records(
             now,
             future_hours,
             task_filter=os.environ.get("TW_TASK_FILTER", ""),
-            )
+            timeout_seconds=float(os.environ.get("TW_COMMAND_TIMEOUT_SECONDS", "30")),
+        )
         ),
         include_projects=os.environ.get("TW_INCLUDE_PROJECTS", ""),
         exclude_projects=os.environ.get("TW_EXCLUDE_PROJECTS", ""),

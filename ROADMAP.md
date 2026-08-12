@@ -128,7 +128,7 @@ taskwarrior_tnt/
 - [ ] Replace tab-separated state files with versioned JSON state.
 - [x] Add versioned JSON state migration while retaining legacy files.
 - [ ] Add atomic state writes and explicit schema migration.
-- [ ] Add configurable command timeouts.
+- [x] Add configurable command timeouts.
 - [ ] Add bounded log rotation.
 - [ ] Quote notification action commands safely when paths contain spaces or shell characters.
 - [ ] Document which environment variables remain supported as one-off overrides.
