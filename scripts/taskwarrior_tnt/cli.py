@@ -33,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=VERSION)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("scan", help="scan and update notifications")
+    sub.add_parser("refresh", help="refresh notifications from live Taskwarrior data")
     doctor = sub.add_parser("doctor", help="run installation diagnostics")
     doctor.set_defaults(args=("--doctor",))
     channels = sub.add_parser("channels", help="manage Android notification channels")
@@ -53,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command == "scan":
+    if args.command in {"scan", "refresh"}:
         return run_script("taskwarrior_notify_due_tasks.sh")
     if args.command == "doctor":
         return run_script("taskwarrior_notify_due_tasks.sh", "--doctor")

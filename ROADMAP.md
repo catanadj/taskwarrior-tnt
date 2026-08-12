@@ -170,8 +170,8 @@ taskwarrior_tnt/
 - [x] Make `tnt status` show the next eligible reminder and current channel state.
 - [ ] Add a health notification after repeated scan failures without spamming every cycle.
 - [ ] Add an optional recovery message when scans begin succeeding again.
-- [ ] Provide a stable post-sync refresh command.
-- [ ] Document how sync tools can invoke refresh after remote task changes arrive.
+- [x] Provide a stable post-sync refresh command.
+- [x] Document how sync tools can invoke refresh after remote task changes arrive.
 
 ## Phase 6: Make The GUI A Control Center
 

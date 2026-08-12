@@ -48,6 +48,12 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --setup-channels
 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh --test-notification
 TW_DRY_RUN=1 ~/.termux/tasker/taskwarrior_notify_due_tasks.sh
+
+Tools that sync Taskwarrior can request an immediate live refresh with:
+
+```sh
+~/.termux/tasker/tnt refresh
+```
 ```
 
 Launch the optional GUI:
