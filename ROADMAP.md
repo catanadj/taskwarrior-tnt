@@ -126,6 +126,7 @@ taskwarrior_tnt/
 - [ ] Add `tnt config migrate` with backup creation.
 - [x] Add `tnt config migrate` with backup creation.
 - [ ] Replace tab-separated state files with versioned JSON state.
+- [x] Add versioned JSON state migration while retaining legacy files.
 - [ ] Add atomic state writes and explicit schema migration.
 - [ ] Add configurable command timeouts.
 - [ ] Add bounded log rotation.

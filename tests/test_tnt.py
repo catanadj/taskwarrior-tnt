@@ -40,6 +40,7 @@ from taskwarrior_tnt.state import (
     upsert_snooze,
     write_manifest,
     state_lock,
+    migrate_to_json,
 )
 from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
@@ -524,6 +525,18 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
     def test_shared_state_lock_is_released_and_reusable(self) -> None:
         with state_lock(self.state_dir):
             self.assertTrue((self.state_dir / ".state.lock").is_dir())
+
+    def test_state_migration_writes_versioned_json_without_removing_legacy_files(self) -> None:
+        manifest = self.state_dir / "active-notifications"
+        write_manifest(manifest, [ManifestEntry("100", "uuid", "fingerprint")])
+        snoozes = self.state_dir / "snoozed-tasks"
+        upsert_snooze(snoozes, "uuid", 999)
+        destination = migrate_to_json(self.state_dir)
+        payload = json.loads(destination.read_text())
+        self.assertEqual(1, payload["schema_version"])
+        self.assertEqual("uuid", payload["active_notifications"][0]["uuid"])
+        self.assertTrue(manifest.exists())
+        self.assertTrue(snoozes.exists())
         self.assertFalse((self.state_dir / ".state.lock").exists())
         with state_lock(self.state_dir):
             self.assertTrue((self.state_dir / ".state.lock").is_dir())

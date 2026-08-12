@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import json
+import shutil
 import tempfile
 import time
 from contextlib import contextmanager
@@ -83,6 +85,30 @@ def remove_snooze(path: str | Path, uuid: str) -> None:
     snoozes = read_snoozes(path, 0)
     snoozes.pop(uuid, None)
     write_snoozes(path, snoozes)
+
+
+def migrate_to_json(state_dir: str | Path, output: str | Path | None = None) -> Path:
+    """Write a versioned JSON snapshot while retaining legacy state files."""
+    directory = Path(state_dir)
+    destination = Path(output) if output else directory / "state.json"
+    manifest = read_manifest(directory / "active-notifications")
+    snoozes = read_snoozes(directory / "snoozed-tasks", 0)
+    payload = {
+        "schema_version": 1,
+        "active_notifications": [
+            {
+                "notification_id": item.notification_id,
+                "uuid": item.uuid,
+                "fingerprint": item.fingerprint,
+            }
+            for item in manifest
+        ],
+        "snoozed_tasks": snoozes,
+    }
+    if destination.exists():
+        shutil.copy2(destination, destination.with_suffix(destination.suffix + ".bak"))
+    _atomic_write(destination, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return destination
 
 
 @contextmanager

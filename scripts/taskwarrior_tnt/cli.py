@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from taskwarrior_tnt.config import migrate_to_toml, read_config, validate
-from taskwarrior_tnt.state import read_manifest, read_snoozes
+from taskwarrior_tnt.state import migrate_to_json, read_manifest, read_snoozes
 
 VERSION = "0.2.0"
 
@@ -41,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="show notification state")
     config = sub.add_parser("config", help="validate configuration")
     config.add_argument("action", choices=("check", "migrate"))
+    state = sub.add_parser("state", help="manage state files")
+    state.add_argument("action", choices=("migrate",))
     return parser
 
 
@@ -67,10 +69,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "migrate":
             try:
                 print(f"Wrote {migrate_to_toml()}")
-                return 0
             except ValueError as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
+            return 0
         try:
             errors = validate(read_config())
         except ValueError as exc:
@@ -81,6 +83,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"ERROR: {error}", file=sys.stderr)
             return 2
         print("Configuration is valid.")
+        return 0
+    if args.command == "state" and args.action == "migrate":
+        state_dir = os.environ.get("TW_STATE_DIR", "~/.local/state/taskwarrior-tnt")
+        print(f"Wrote {migrate_to_json(Path(state_dir).expanduser())}")
         return 0
     script = {
         "start": "taskwarrior_start_stop_task.sh",
