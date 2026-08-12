@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 
 from taskwarrior_tnt.config import read_config, validate
+from taskwarrior_tnt.state import read_manifest, read_snoozes
+
+VERSION = "0.2.0"
 
 
 def scripts_dir() -> Path:
@@ -22,6 +25,7 @@ def run_script(name: str, *args: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tnt", description="Taskwarrior TNT command line")
+    parser.add_argument("--version", action="version", version=VERSION)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("scan", help="scan and update notifications")
     doctor = sub.add_parser("doctor", help="run installation diagnostics")
@@ -51,7 +55,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "gui":
         return run_script("taskwarrior_gui.sh")
     if args.command == "status":
-        return run_script("taskwarrior_notify_due_tasks.sh", "--doctor")
+        state_dir = Path(os.environ.get("TW_STATE_DIR", "~/.local/state/taskwarrior-tnt")).expanduser()
+        now_epoch = int(__import__("time").time())
+        print(f"version={VERSION}")
+        print(f"state_dir={state_dir}")
+        print(f"active_notifications={len(read_manifest(state_dir / 'active-notifications'))}")
+        print(f"snoozed_tasks={len(read_snoozes(state_dir / 'snoozed-tasks', now_epoch))}")
+        print(f"channels_cached={'yes' if (state_dir / 'notification-channels').exists() else 'no'}")
+        return 0
     if args.command == "config":
         try:
             errors = validate(read_config())

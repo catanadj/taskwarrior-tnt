@@ -109,7 +109,7 @@ taskwarrior_tnt/
 - [x] Implement `tnt gui`.
 - [ ] Turn existing Tasker scripts into thin compatibility wrappers.
 - [ ] Keep existing script names and arguments working for at least one migration release.
-- [ ] Add `tnt --version` and include the version in doctor output.
+- [x] Add `tnt --version` and include the version in CLI status output.
 
 ### Completion Criteria
 
