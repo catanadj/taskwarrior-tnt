@@ -19,6 +19,7 @@ from taskwarrior_tnt.formatting import (
     parse_task_date,
 )
 from taskwarrior_tnt.reminders import build_reminders
+from taskwarrior_tnt.policy import filter_tasks
 from taskwarrior_tnt.models import Reminder as TaskRow
 from taskwarrior_tnt.taskwarrior import (
     TaskwarriorCommandError,
@@ -42,6 +43,11 @@ DEFAULT_CONFIG = os.path.expanduser("~/.termux/tasker/taskwarrior_tasker.conf")
 class Config:
     task_bin: str = "task"
     task_filter: str = ""
+    include_projects: str = ""
+    exclude_projects: str = ""
+    include_tags: str = ""
+    exclude_tags: str = ""
+    opt_out_tag: str = ""
     past_hours: float = 2
     future_hours: float = 2
     max_tasks: int = 12
@@ -105,6 +111,11 @@ def load_config(path: str) -> Config:
     return Config(
         task_bin=values.get("TASK_BIN", "task"),
         task_filter=values.get("TW_TASK_FILTER", ""),
+        include_projects=values.get("TW_INCLUDE_PROJECTS", ""),
+        exclude_projects=values.get("TW_EXCLUDE_PROJECTS", ""),
+        include_tags=values.get("TW_INCLUDE_TAGS", ""),
+        exclude_tags=values.get("TW_EXCLUDE_TAGS", ""),
+        opt_out_tag=values.get("TW_OPTOUT_TAG", ""),
         past_hours=num("TW_WINDOW_PAST_HOURS", 2),
         future_hours=num("TW_WINDOW_FUTURE_HOURS", 2),
         max_tasks=integer("TW_MAX_TASKS", 12),
@@ -219,13 +230,20 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
 
     now = datetime.now().astimezone()
     try:
-        tasks = normalize_tasks(
-            export_pending(
+        tasks = filter_tasks(
+            normalize_tasks(
+                export_pending(
                 config.task_bin,
                 now,
                 config.future_hours,
                 task_filter=config.task_filter,
-            )
+                )
+            ),
+            include_projects=config.include_projects,
+            exclude_projects=config.exclude_projects,
+            include_tags=config.include_tags,
+            exclude_tags=config.exclude_tags,
+            opt_out_tag=config.opt_out_tag,
         )
     except TaskwarriorCommandError as exc:
         return [], str(exc)

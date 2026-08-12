@@ -23,7 +23,7 @@ from taskwarrior_tnt.formatting import (
     parse_iso_duration,
     parse_task_date,
 )
-from taskwarrior_tnt.policy import reminder_bucket, select_priority
+from taskwarrior_tnt.policy import filter_tasks, reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder, TaskRecord
 from taskwarrior_tnt.taskwarrior import (
     TaskwarriorCommandError,
@@ -532,6 +532,20 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual(1, len(reminders))
         self.assertIn("Active | active without due", reminders[0].title)
         self.assertIn("ACTIVE | active", reminders[0].content)
+
+    def test_shared_task_filters_apply_project_tags_and_opt_out(self) -> None:
+        tasks = [
+            TaskRecord("a", FIXED_NOW, project="work", tags=("next",)),
+            TaskRecord("b", FIXED_NOW, project="home", tags=("next",)),
+            TaskRecord("c", FIXED_NOW, project="work", tags=("skip",)),
+        ]
+        selected = filter_tasks(
+            tasks,
+            include_projects="work",
+            include_tags="next",
+            opt_out_tag="skip",
+        )
+        self.assertEqual(["a"], [task.uuid for task in selected])
 
     def test_configuration_validation_accepts_defaults_and_rejects_invalid_values(self) -> None:
         self.assertEqual([], validate({}))

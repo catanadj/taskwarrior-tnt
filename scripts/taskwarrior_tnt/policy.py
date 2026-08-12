@@ -6,8 +6,39 @@ from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from typing import TypeVar
 
+from taskwarrior_tnt.models import TaskRecord
+
 
 Record = TypeVar("Record")
+
+
+def _csv(value: str) -> set[str]:
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def filter_tasks(
+    tasks: Iterable["TaskRecord"],
+    *,
+    include_projects: str = "",
+    exclude_projects: str = "",
+    include_tags: str = "",
+    exclude_tags: str = "",
+    opt_out_tag: str = "",
+) -> list["TaskRecord"]:
+    """Apply optional project and tag eligibility rules consistently."""
+    included_projects = _csv(include_projects)
+    excluded_projects = _csv(exclude_projects)
+    included_tags = _csv(include_tags)
+    excluded_tags = _csv(exclude_tags)
+    return [
+        task
+        for task in tasks
+        if (not included_projects or task.project in included_projects)
+        and task.project not in excluded_projects
+        and (not included_tags or included_tags.intersection(task.tags))
+        and not excluded_tags.intersection(task.tags)
+        and (not opt_out_tag.strip() or opt_out_tag.strip() not in task.tags)
+    ]
 
 
 def reminder_bucket(

@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 
 from taskwarrior_tnt.formatting import clean_text
+from taskwarrior_tnt.policy import filter_tasks
 from taskwarrior_tnt.reminders import build_reminders
 from taskwarrior_tnt.state import read_snoozes
 from taskwarrior_tnt.taskwarrior import export_pending, normalize_tasks
@@ -37,13 +38,20 @@ def generate_records(
     now_epoch = int(now.timestamp())
     snoozed = read_snoozes(snooze_file, now_epoch)
     task_bin = os.environ.get("TASK_BIN", "task")
-    tasks = normalize_tasks(
-        export_pending(
+    tasks = filter_tasks(
+        normalize_tasks(
+            export_pending(
             task_bin,
             now,
             future_hours,
             task_filter=os.environ.get("TW_TASK_FILTER", ""),
-        )
+            )
+        ),
+        include_projects=os.environ.get("TW_INCLUDE_PROJECTS", ""),
+        exclude_projects=os.environ.get("TW_EXCLUDE_PROJECTS", ""),
+        include_tags=os.environ.get("TW_INCLUDE_TAGS", ""),
+        exclude_tags=os.environ.get("TW_EXCLUDE_TAGS", ""),
+        opt_out_tag=os.environ.get("TW_OPTOUT_TAG", ""),
     )
     reminders = build_reminders(
         tasks,
