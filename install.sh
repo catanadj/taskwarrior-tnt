@@ -35,6 +35,8 @@ required_python_package_files=(
   taskwarrior_tnt/reminders.py
   taskwarrior_tnt/notifier.py
   taskwarrior_tnt/legacy_window.py
+  taskwarrior_tnt/snooze.py
+  taskwarrior_tnt/quiet_hours.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then

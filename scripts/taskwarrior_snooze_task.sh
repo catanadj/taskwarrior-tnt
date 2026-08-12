@@ -184,34 +184,8 @@ if [[ "$snooze_mode" == "modify_due" ]]; then
   exit 0
 fi
 
-until_epoch="$(python3 - "$SNOOZE_UNTIL" <<'PY'
-import os
-import sys
-from datetime import datetime, timedelta
-
-value = sys.argv[1].strip().lower()
-now_value = os.environ.get("TW_TEST_NOW")
-try:
-    now = datetime.fromisoformat(now_value) if now_value else datetime.now().astimezone()
-except ValueError:
-    raise SystemExit(f"invalid TW_TEST_NOW: {now_value}")
-if now.tzinfo is None:
-    now = now.astimezone()
-
-if value in ("tomorrow", "+1 day", "1 day"):
-    target = now + timedelta(days=1)
-elif value in ("+1 hour", "1 hour", "1h"):
-    target = now + timedelta(hours=1)
-elif value.endswith("h") and value[:-1].replace(".", "", 1).isdigit():
-    target = now + timedelta(hours=float(value[:-1]))
-elif value.endswith("m") and value[:-1].replace(".", "", 1).isdigit():
-    target = now + timedelta(minutes=float(value[:-1]))
-else:
-    raise SystemExit(f"unsupported snooze value: {value}")
-
-print(int(target.timestamp()))
-PY
-)"
+until_epoch="$(PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" \
+  python3 -m taskwarrior_tnt.snooze "$SNOOZE_UNTIL")"
 
 remove_local_snooze
 printf '%s\t%s\n' "$TASK_UUID" "$until_epoch" >> "$SNOOZE_FILE"

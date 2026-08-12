@@ -323,41 +323,9 @@ if [[ "$COMMAND" == "--test-notification" ]]; then
 fi
 
 in_quiet_hours() {
-  python3 - "$QUIET_HOURS_ENABLED" "$QUIET_HOURS_START" "$QUIET_HOURS_END" <<'PY'
-import os
-import re
-import sys
-from datetime import datetime
-
-enabled, start_value, end_value = sys.argv[1:4]
-if enabled != "1":
-    raise SystemExit(1)
-
-pattern = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
-start_match = pattern.match(start_value)
-end_match = pattern.match(end_value)
-if not start_match or not end_match:
-    print(f"ERROR: invalid quiet hours: {start_value}-{end_value}", file=sys.stderr)
-    raise SystemExit(2)
-
-start_minutes = int(start_match.group(1)) * 60 + int(start_match.group(2))
-end_minutes = int(end_match.group(1)) * 60 + int(end_match.group(2))
-now_value = os.environ.get("TW_TEST_NOW")
-try:
-    now = datetime.fromisoformat(now_value) if now_value else datetime.now().astimezone()
-except ValueError:
-    print(f"ERROR: invalid TW_TEST_NOW: {now_value}", file=sys.stderr)
-    raise SystemExit(2)
-if now.tzinfo is None:
-    now = now.astimezone()
-now_minutes = now.hour * 60 + now.minute
-
-if start_minutes == end_minutes:
-    raise SystemExit(0)
-if start_minutes < end_minutes:
-    raise SystemExit(0 if start_minutes <= now_minutes < end_minutes else 1)
-raise SystemExit(0 if now_minutes >= start_minutes or now_minutes < end_minutes else 1)
-PY
+  PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m taskwarrior_tnt.quiet_hours \
+      "$QUIET_HOURS_ENABLED" "$QUIET_HOURS_START" "$QUIET_HOURS_END"
 }
 
 doctor_check_command() {
