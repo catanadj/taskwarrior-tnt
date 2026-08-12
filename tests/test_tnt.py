@@ -45,7 +45,7 @@ from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
 from taskwarrior_tnt.integrations import IntegrationStatus, JotIntegration
 from taskwarrior_tnt.reminders import build_reminders
-from taskwarrior_tnt.config import validate
+from taskwarrior_tnt.config import migrate_to_toml, validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -492,6 +492,16 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         errors = validate({"TW_MAX_TASKS": "0", "TW_QUIET_HOURS_START": "25:00"})
         self.assertIn("TW_MAX_TASKS must be at least 1", errors)
         self.assertIn("TW_QUIET_HOURS_START must use HH:MM", errors)
+
+    def test_configuration_migration_writes_toml_and_backup(self) -> None:
+        source = self.temp_dir / "tasker.conf"
+        destination = self.temp_dir / "taskwarrior_tnt.toml"
+        source.write_text("TW_MAX_TASKS=5\nTW_QUIET_HOURS_START=21:00\n")
+        self.assertEqual(destination, migrate_to_toml(str(source), str(destination)))
+        self.assertIn("schema_version = 1", destination.read_text())
+        destination.write_text("old")
+        migrate_to_toml(str(source), str(destination))
+        self.assertTrue(destination.with_suffix(".toml.bak").exists())
 
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"

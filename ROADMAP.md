@@ -124,6 +124,7 @@ taskwarrior_tnt/
 - [ ] Support importing the existing shell configuration.
 - [x] Add `tnt config check` with actionable validation errors.
 - [ ] Add `tnt config migrate` with backup creation.
+- [x] Add `tnt config migrate` with backup creation.
 - [ ] Replace tab-separated state files with versioned JSON state.
 - [ ] Add atomic state writes and explicit schema migration.
 - [ ] Add configurable command timeouts.

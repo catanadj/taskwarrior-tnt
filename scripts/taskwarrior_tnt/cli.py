@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from taskwarrior_tnt.config import read_config, validate
+from taskwarrior_tnt.config import migrate_to_toml, read_config, validate
 from taskwarrior_tnt.state import read_manifest, read_snoozes
 
 VERSION = "0.2.0"
@@ -40,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("gui", help="open the Termux:GUI dashboard")
     sub.add_parser("status", help="show notification state")
     config = sub.add_parser("config", help="validate configuration")
-    config.add_argument("action", choices=("check",))
+    config.add_argument("action", choices=("check", "migrate"))
     return parser
 
 
@@ -64,6 +64,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"channels_cached={'yes' if (state_dir / 'notification-channels').exists() else 'no'}")
         return 0
     if args.command == "config":
+        if args.action == "migrate":
+            try:
+                print(f"Wrote {migrate_to_toml()}")
+                return 0
+            except ValueError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
         try:
             errors = validate(read_config())
         except ValueError as exc:
