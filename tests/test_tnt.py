@@ -25,6 +25,15 @@ from taskwarrior_tnt.formatting import (
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder, TaskRecord
 from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
+from taskwarrior_tnt.state import (
+    ManifestEntry,
+    read_manifest,
+    read_snoozes,
+    remove_manifest_id,
+    remove_snooze,
+    upsert_snooze,
+    write_manifest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -419,6 +428,24 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         )
         with self.assertRaisesRegex(TaskwarriorCommandError, "valid JSON"):
             export_pending(str(bad_task), FIXED_NOW, 2)
+
+    def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
+        manifest = self.state_dir / "active-notifications"
+        write_manifest(
+            manifest,
+            [ManifestEntry("100", "uuid-a", "finger-a"), ManifestEntry("200", "uuid-b", "finger-b")],
+        )
+        remove_manifest_id(manifest, "100")
+        self.assertEqual(
+            [ManifestEntry("200", "uuid-b", "finger-b")], read_manifest(manifest)
+        )
+
+        snoozes = self.state_dir / "snoozed-tasks"
+        upsert_snooze(snoozes, "uuid-a", 200)
+        upsert_snooze(snoozes, "uuid-b", 400)
+        self.assertEqual({"uuid-b": 400}, read_snoozes(snoozes, 200))
+        remove_snooze(snoozes, "uuid-b")
+        self.assertEqual({"uuid-a": 200}, read_snoozes(snoozes, 0))
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"

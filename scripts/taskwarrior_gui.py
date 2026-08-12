@@ -21,6 +21,7 @@ from taskwarrior_tnt.formatting import (
 from taskwarrior_tnt.policy import reminder_bucket, select_priority
 from taskwarrior_tnt.models import Reminder as TaskRow
 from taskwarrior_tnt.taskwarrior import TaskwarriorCommandError, export_pending
+from taskwarrior_tnt.state import read_snoozes
 
 try:
     import termuxgui as tg
@@ -130,15 +131,7 @@ def load_config(path: str) -> Config:
 def read_snoozed(state_dir: str) -> set[str]:
     path = Path(state_dir) / "snoozed-tasks"
     now_epoch = int(datetime.now().astimezone().timestamp())
-    snoozed: set[str] = set()
-    try:
-        for line in path.read_text().splitlines():
-            uuid, _, until = line.partition("\t")
-            if uuid and until and int(until) > now_epoch:
-                snoozed.add(uuid)
-    except (OSError, ValueError):
-        pass
-    return snoozed
+    return set(read_snoozes(path, now_epoch))
 
 
 def taskrow_from_cache(item: dict[str, Any]) -> TaskRow | None:
