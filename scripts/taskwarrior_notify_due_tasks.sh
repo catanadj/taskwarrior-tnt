@@ -62,6 +62,7 @@ for config_name in \
   TW_STARTED_NOTIFICATION_CHANNEL_NAME \
   TW_NOTIFICATION_PRIORITY \
   TW_STARTED_NOTIFICATION_PRIORITY \
+  TW_STARTED_NOTIFICATION_ONGOING \
   TASK_BIN \
   TW_TASK_FILTER \
   TW_COMMAND_TIMEOUT_SECONDS \
@@ -117,6 +118,7 @@ for config_name in \
   TW_STARTED_NOTIFICATION_CHANNEL_NAME \
   TW_NOTIFICATION_PRIORITY \
   TW_STARTED_NOTIFICATION_PRIORITY \
+  TW_STARTED_NOTIFICATION_ONGOING \
   TASK_BIN \
   TW_TASK_FILTER \
   TW_COMMAND_TIMEOUT_SECONDS \
@@ -165,6 +167,7 @@ STARTED_NOTIFICATION_CHANNEL="${TW_STARTED_NOTIFICATION_CHANNEL:-taskwarrior-tnt
 STARTED_NOTIFICATION_CHANNEL_NAME="${TW_STARTED_NOTIFICATION_CHANNEL_NAME:-Taskwarrior TNT active}"
 NOTIFICATION_PRIORITY="${TW_NOTIFICATION_PRIORITY:-high}"
 STARTED_NOTIFICATION_PRIORITY="${TW_STARTED_NOTIFICATION_PRIORITY:-high}"
+STARTED_NOTIFICATION_ONGOING="${TW_STARTED_NOTIFICATION_ONGOING:-0}"
 TASK_BIN="${TASK_BIN:-task}"
 TW_TASK_FILTER="${TW_TASK_FILTER:-}"
 COMPLETE_SCRIPT="${TW_COMPLETE_SCRIPT:-$HOME/.termux/tasker/taskwarrior_complete_task.sh}"
@@ -551,7 +554,7 @@ post_notification_record() {
   local notification_group notification_icon notification_priority notification_channel
   local complete_action delete_action snooze_hour_action snooze_tomorrow_action
   local button1_text button1_action
-  local -a channel_args=()
+  local -a channel_args=() ongoing_args=()
 
   [[ -z "$notification_id" ]] && return 0
 
@@ -579,6 +582,9 @@ post_notification_record() {
     notification_icon="$STARTED_NOTIFICATION_ICON"
     notification_priority="$STARTED_NOTIFICATION_PRIORITY"
     notification_channel="$STARTED_NOTIFICATION_CHANNEL"
+    if [[ "$STARTED_NOTIFICATION_ONGOING" == "1" ]]; then
+      ongoing_args=(--ongoing)
+    fi
   fi
   if [[ "$CHANNELS_ACTIVE" == "1" ]]; then
     channel_args=(--channel "$notification_channel")
@@ -620,7 +626,8 @@ post_notification_record() {
       --on-delete "$delete_action" \
       --alert-once \
       --group "$notification_group" \
-      --priority "$notification_priority"
+      --priority "$notification_priority" \
+      "${ongoing_args[@]}"
     if [[ "$REORDER_EACH_RUN" == "1" ]]; then
       echo "Reposted: $notification_id $title"
     else
