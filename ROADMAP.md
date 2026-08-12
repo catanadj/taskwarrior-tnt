@@ -113,9 +113,9 @@ taskwarrior_tnt/
 
 ### Completion Criteria
 
-- [ ] Tasker profiles do not need to change during migration.
-- [ ] All user-facing commands return meaningful exit codes.
-- [ ] Errors have concise terminal output, structured logs, and optional Android feedback.
+- [x] Tasker profiles do not need to change during migration.
+- [x] All user-facing commands return meaningful exit codes.
+- [x] Errors have concise terminal output, structured logs, and optional Android feedback.
 
 ## Phase 4: Modernize Configuration And State
 
@@ -136,7 +136,7 @@ taskwarrior_tnt/
 ### Completion Criteria
 
 - [x] Invalid values are rejected before a scan changes notifications.
-- [ ] Upgrades do not silently overwrite user configuration.
+- [x] Upgrades do not silently overwrite user configuration.
 - [x] State from the current release migrates without orphaning notifications or snoozes.
 
 ## Phase 5: Improve Daily Use
@@ -202,13 +202,13 @@ taskwarrior_tnt/
 
 ## Phase 8: Release And Maintenance Quality
 
-- [ ] Add `.gitignore` entries for Python, editor, and test artifacts.
+- [x] Add `.gitignore` entries for Python, editor, and test artifacts.
 - [x] Add release notes and semantic version tags.
 - [x] Test installation over an existing configuration.
 - [x] Test clean installation in a fresh Termux environment.
 - [ ] Add a concise upgrade guide for configuration and state migrations.
 - [ ] Add issue templates for installation, notification, and Taskwarrior problems.
-- [ ] Keep the README focused on installation and daily use; move internals to dedicated documentation.
+- [x] Keep the README focused on installation and daily use; move internals to dedicated documentation.
 
 ## Recommended Execution Order
 
