@@ -66,6 +66,7 @@ class Config:
         "~/.local/state/taskwarrior-tnt/gui-cache.json"
     )
     gui_cache_max_age_seconds: int = 900
+    always_show_active: bool = False
 
 
 def load_config(path: str) -> Config:
@@ -129,6 +130,7 @@ def load_config(path: str) -> Config:
             "TW_GUI_CACHE_FILE", os.path.join(state_dir, "gui-cache.json")
         ),
         gui_cache_max_age_seconds=integer("TW_GUI_CACHE_MAX_AGE_SECONDS", 900),
+        always_show_active=values.get("TW_ALWAYS_SHOW_ACTIVE", "0") == "1",
     )
 
 
@@ -228,6 +230,7 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
         config.future_hours,
         config.max_tasks,
         snoozed,
+        config.always_show_active,
     )
     write_task_cache(config, rows)
     return rows, ""

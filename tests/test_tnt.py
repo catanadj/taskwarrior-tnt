@@ -488,6 +488,17 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertIn("13:20 - 13:30", reminders[1].title)
         self.assertIn("SOON", reminders[1].content)
 
+    def test_always_show_active_keeps_active_task_outside_window(self) -> None:
+        task = TaskRecord(
+            "20202020-0000-0000-0000-000000000000",
+            FIXED_NOW - timedelta(days=1),
+            description="active task",
+            started=True,
+        )
+        reminders = build_reminders([task], FIXED_NOW, 2, 2, 5, always_show_active=True)
+        self.assertEqual(1, len(reminders))
+        self.assertEqual("ACTIVE", reminders[0].content.split(" | ")[0])
+
     def test_configuration_validation_accepts_defaults_and_rejects_invalid_values(self) -> None:
         self.assertEqual([], validate({}))
         errors = validate({"TW_MAX_TASKS": "0", "TW_QUIET_HOURS_START": "25:00"})

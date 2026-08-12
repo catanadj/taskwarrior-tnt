@@ -39,7 +39,13 @@ def generate_records(
     task_bin = os.environ.get("TASK_BIN", "task")
     tasks = normalize_tasks(export_pending(task_bin, now, future_hours))
     reminders = build_reminders(
-        tasks, now, past_hours, future_hours, max_tasks, set(snoozed)
+        tasks,
+        now,
+        past_hours,
+        future_hours,
+        max_tasks,
+        set(snoozed),
+        os.environ.get("TW_ALWAYS_SHOW_ACTIVE", "0") == "1",
     )
     cache_rows = [
         {

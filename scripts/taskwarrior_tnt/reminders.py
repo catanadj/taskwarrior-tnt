@@ -16,13 +16,18 @@ def build_reminders(
     future_hours: float,
     max_tasks: int,
     snoozed: set[str] | None = None,
+    always_show_active: bool = False,
 ) -> list[Reminder]:
     snoozed = snoozed or set()
     reminders: list[Reminder] = []
     for task in tasks:
         if task.uuid in snoozed:
             continue
-        bucket = reminder_bucket(task.due, now, past_hours, future_hours)
+        bucket = (
+            "window"
+            if always_show_active and task.started
+            else reminder_bucket(task.due, now, past_hours, future_hours)
+        )
         if bucket is None:
             continue
         action = "stop" if task.started else "start"
