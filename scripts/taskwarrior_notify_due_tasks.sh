@@ -514,13 +514,10 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
-from taskwarrior_tnt.formatting import (
-    clean_text,
-    format_delta,
-    parse_iso_duration,
-    parse_task_date,
-)
-from taskwarrior_tnt.policy import reminder_bucket, select_priority
+from taskwarrior_tnt.formatting import clean_text
+from taskwarrior_tnt.reminders import build_reminders
+from taskwarrior_tnt.state import read_snoozes
+from taskwarrior_tnt.taskwarrior import export_pending, normalize_tasks
 
 
 def notification_id(uuid, bucket):
@@ -552,137 +549,41 @@ except ValueError:
 if now.tzinfo is None:
     now = now.astimezone()
 now_epoch = int(now.timestamp())
-snoozed_until_by_uuid = {}
-try:
-    with open(snooze_file, "r", encoding="utf-8") as handle:
-        for line in handle:
-            uuid, _, until_epoch = line.strip().partition("\t")
-            if not uuid or not until_epoch:
-                continue
-            try:
-                until_epoch_int = int(until_epoch)
-            except ValueError:
-                continue
-            if until_epoch_int > now_epoch:
-                snoozed_until_by_uuid[uuid] = until_epoch_int
-except FileNotFoundError:
-    pass
+snoozed_until_by_uuid = read_snoozes(snooze_file, now_epoch)
 
 task_bin = os.environ.get("TASK_BIN", "task")
-end_for_filter = now + timedelta(hours=future_hours)
 try:
-    result = subprocess.run(
-        [
-            task_bin,
-            "rc.hooks:off",
-            "rc.verbose:nothing",
-            "rc.json.array:on",
-            "status:pending",
-            f"due.before:{end_for_filter.strftime('%Y%m%dT%H%M%S')}",
-            "export",
-        ],
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode != 0:
-        result = subprocess.run(
-            [
-                task_bin,
-                "rc.hooks:off",
-                "rc.verbose:nothing",
-                "rc.json.array:on",
-                "status:pending",
-                "export",
-            ],
-            check=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-except OSError as exc:
-    print(f"ERROR\ttask export failed: {exc}")
+    tasks = normalize_tasks(export_pending(task_bin, now, future_hours))
+except Exception as exc:
+    print(f"ERROR\t{clean_text(str(exc))}")
     sys.exit(2)
 
-if result.returncode != 0:
-    message = clean_text(result.stderr) or clean_text(result.stdout) or "task export failed"
-    print(f"ERROR\t{message}")
-    sys.exit(2)
-
-try:
-    tasks = json.loads(result.stdout or "[]")
-except json.JSONDecodeError as exc:
-    print(f"ERROR\ttask export did not return valid JSON: {exc}")
-    sys.exit(2)
-
-
-matches = []
-for task in tasks:
-    uuid = clean_text(task.get("uuid"))
-    due = parse_task_date(task.get("due"))
-    if not uuid or due is None:
-        continue
-    if uuid in snoozed_until_by_uuid:
-        continue
-    bucket = reminder_bucket(due, now, past_hours, future_hours)
-    if bucket is None:
-        continue
-
-    urgency = float(task.get("urgency") or 0)
-    description = clean_text(task.get("description"))
-    project = clean_text(task.get("project"))
-    tags = task.get("tags") or []
-    duration = parse_iso_duration(task.get("duration"))
-    is_started = bool(task.get("start"))
-    task_action = "stop" if is_started else "start"
-    task_button = "Stop" if task_action == "stop" else "Start"
-
-    if duration:
-        start_time = due - duration
-        time_text = f"{start_time.strftime('%H:%M')} - {due.strftime('%H:%M')}"
-    else:
-        start_time = due
-        time_text = f"Due {due.strftime('%H:%M')}"
-
-    if bucket == "overdue":
-        status_text = "OVERDUE"
-    elif now < start_time:
-        status_text = "SOON"
-    elif now <= due:
-        status_text = "NOW"
-    else:
-        status_text = "DUE"
-
-    if now < start_time:
-        delta_text = f"starts in {format_delta(start_time - now)}"
-    elif now > due:
-        delta_text = f"due {format_delta(now - due)} ago"
-    else:
-        delta_text = f"due in {format_delta(due - now)}"
-
-    if is_started:
-        status_text = "ACTIVE"
-
-    content_parts = [status_text, delta_text]
-    if project:
-        content_parts.append(project)
-    if tags:
-        content_parts.append("+" + " +".join(tags[:3]))
-
-    title = f"{time_text} | {description or uuid[:8]}"
-    content = " | ".join(content_parts)
-    started_value = "1" if is_started else "0"
-    matches.append((bucket, due, -urgency, notification_id(uuid, bucket), uuid, title, content, task_action, task_button, started_value))
-
-selected_matches = select_priority(
-    matches,
+selected_reminders = build_reminders(
+    tasks,
+    now,
+    past_hours,
+    future_hours,
     max_tasks,
-    due_key=lambda item: item[1],
-    urgency_key=lambda item: -item[2],
-    bucket_key=lambda item: item[0],
-    active_key=lambda item: item[9] == "1",
+    set(snoozed_until_by_uuid),
 )
+
+selected_matches = []
+for reminder in selected_reminders:
+    started_value = "1" if reminder.action == "stop" else "0"
+    selected_matches.append(
+        (
+            reminder.bucket,
+            reminder.due,
+            -reminder.urgency,
+            notification_id(reminder.uuid, reminder.bucket),
+            reminder.uuid,
+            reminder.title,
+            reminder.content,
+            reminder.action,
+            reminder.button,
+            started_value,
+        )
+    )
 
 cache_rows = []
 for bucket, due, urgency_sort, notif_id, uuid, title, content, task_action, task_button, started_value in selected_matches:

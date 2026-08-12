@@ -62,7 +62,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Add state-aware Start, Stop, Done, and due-modification planning in `actions.py`.
 - [x] Isolate Jot support behind an integration interface.
 - [x] Make the GUI consume the shared reminder-building pipeline.
-- [ ] Make the notifier consume the shared reminder-building pipeline.
+- [x] Make the notifier consume the shared reminder-building pipeline.
 - [x] Normalize Taskwarrior exports through typed `TaskRecord` objects for the GUI.
 - [ ] Retire embedded Python heredocs from shell scripts.
 - [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
