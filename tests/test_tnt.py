@@ -586,6 +586,30 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         migrate_to_toml(str(source), str(destination))
         self.assertTrue(destination.with_suffix(".toml.bak").exists())
 
+    def test_install_script_preserves_existing_configuration(self) -> None:
+        home = self.temp_dir / "home"
+        install_dir = home / ".termux" / "tasker"
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(home),
+                "TW_INSTALL_DIR": str(install_dir),
+                "TW_INSTALL_RUN_CHECKS": "0",
+            }
+        )
+        first = subprocess.run(
+            ["bash", str(ROOT / "install.sh")], env=env, capture_output=True, text=True
+        )
+        self.assertEqual(0, first.returncode, first.stderr)
+        config = install_dir / "taskwarrior_tasker.conf"
+        config.write_text("TW_MAX_TASKS=3\n")
+        second = subprocess.run(
+            ["bash", str(ROOT / "install.sh")], env=env, capture_output=True, text=True
+        )
+        self.assertEqual(0, second.returncode, second.stderr)
+        self.assertEqual("TW_MAX_TASKS=3\n", config.read_text())
+        self.assertTrue(config.with_name("taskwarrior_tasker.conf.example").exists())
+
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"
         write_manifest(

@@ -18,7 +18,7 @@ This checklist prioritizes work that improves both the Android experience and th
 
 - [x] A stale `Done` action clears the reminder and reports that the task is already complete.
 - [x] Start, Stop, Done, and Tomorrow work normally for pending tasks.
-- [ ] Existing installations continue to work after rerunning `install.sh`.
+- [x] Existing installations continue to work after rerunning `install.sh`.
 - [x] The repository is clean after verification.
 
 ## Phase 1: Establish An Automated Safety Net
@@ -204,8 +204,8 @@ taskwarrior_tnt/
 
 - [ ] Add `.gitignore` entries for Python, editor, and test artifacts.
 - [x] Add release notes and semantic version tags.
-- [ ] Test installation over an existing configuration.
-- [ ] Test clean installation in a fresh Termux environment.
+- [x] Test installation over an existing configuration.
+- [x] Test clean installation in a fresh Termux environment.
 - [ ] Add a concise upgrade guide for configuration and state migrations.
 - [ ] Add issue templates for installation, notification, and Taskwarrior problems.
 - [ ] Keep the README focused on installation and daily use; move internals to dedicated documentation.
