@@ -114,42 +114,8 @@ tnt_load_task_snapshot() {
     return 2
   fi
 
-  if ! parsed="$(python3 - "$task_uuid" "$output" 2>&1 <<'PY'
-import json
-import sys
-from datetime import datetime, timezone
-
-uuid = sys.argv[1]
-try:
-    tasks = json.loads(sys.argv[2] or "[]")
-except json.JSONDecodeError as exc:
-    print(f"invalid Taskwarrior JSON: {exc}", file=sys.stderr)
-    raise SystemExit(2)
-
-task = next((item for item in tasks if item.get("uuid") == uuid), None)
-if task is None:
-    print("missing\t")
-    raise SystemExit(0)
-
-status = str(task.get("status") or "unknown").replace("\t", " ").replace("\n", " ")
-start_epoch = ""
-start = task.get("start")
-if start:
-    for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S"):
-        try:
-            value = datetime.strptime(start, fmt)
-        except ValueError:
-            continue
-        if start.endswith("Z"):
-            value = value.replace(tzinfo=timezone.utc).astimezone()
-        else:
-            value = value.astimezone()
-        start_epoch = str(int(value.timestamp()))
-        break
-
-print(f"{status}\t{start_epoch}")
-PY
-)"; then
+  if ! parsed="$(PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" \
+      python3 -m taskwarrior_tnt.taskwarrior snapshot "$task_bin" "$task_uuid" 2>&1)"; then
     TNT_TASK_SNAPSHOT_ERROR="$parsed"
     return 2
   fi
