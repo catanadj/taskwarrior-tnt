@@ -33,6 +33,7 @@ required_python_package_files=(
   taskwarrior_tnt/actions.py
   taskwarrior_tnt/integrations.py
   taskwarrior_tnt/reminders.py
+  taskwarrior_tnt/notifier.py
 )
 
 if [[ ! -d "$SOURCE_DIR/scripts" ]]; then

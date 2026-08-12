@@ -64,7 +64,8 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Make the GUI consume the shared reminder-building pipeline.
 - [x] Make the notifier consume the shared reminder-building pipeline.
 - [x] Normalize Taskwarrior exports through typed `TaskRecord` objects for the GUI.
-- [ ] Retire embedded Python heredocs from shell scripts.
+- [ ] Retire all embedded Python heredocs from shell scripts.
+- [x] Retire the notifier record-generation heredoc.
 - [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
 - [ ] Preserve current behavior through characterization tests during extraction.
 
