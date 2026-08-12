@@ -751,6 +751,25 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
             "\n".join(self.calls()),
         )
 
+    def test_completion_toast_prefers_nautical_chain_progress(self) -> None:
+        uuid = "4d" * 18
+        self.task_data = [
+            {
+                "uuid": uuid,
+                "status": "pending",
+                "description": "recurring task",
+                "due": "20260812T130000",
+                "chainID": "nautical-chain",
+                "link": 3,
+                "chainMax": 20,
+            }
+        ]
+        self.run_script("taskwarrior_complete_task.sh", uuid, TNT_TEST_UUID=uuid)
+        self.assertIn(
+            "termux-toast Task 3 out of 20 complete; 17 remaining",
+            "\n".join(self.calls()),
+        )
+
     def test_start_and_stop_are_idempotent(self) -> None:
         uuid = "eeeeeeee-0000-0000-0000-000000000000"
         self.task_status = "pending"

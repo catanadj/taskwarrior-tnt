@@ -224,6 +224,13 @@ else
   log_action "WARN completion progress unavailable"
 fi
 
+if [[ "$TNT_TASK_LINK" =~ ^[0-9]+$ && "$TNT_TASK_CHAIN_MAX" =~ ^[0-9]+$ &&
+      "$TNT_TASK_CHAIN_MAX" -ge "$TNT_TASK_LINK" ]]; then
+  nautical_remaining=$((TNT_TASK_CHAIN_MAX - TNT_TASK_LINK))
+  PROGRESS_MESSAGE="Task $TNT_TASK_LINK out of $TNT_TASK_CHAIN_MAX complete; $nautical_remaining remaining"
+  log_action "OK Nautical completion progress link=$TNT_TASK_LINK chain_max=$TNT_TASK_CHAIN_MAX remaining=$nautical_remaining"
+fi
+
 if command -v termux-toast >/dev/null 2>&1; then
   toast_message="$TASK_SHORT_ID completed"
   if [[ -n "$PROGRESS_MESSAGE" ]]; then
