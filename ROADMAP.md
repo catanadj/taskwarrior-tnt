@@ -30,17 +30,18 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Test active, execution-window, and overdue selection priority.
 - [x] Test `TW_MAX_TASKS` behavior with a large overdue backlog.
 - [x] Test quiet hours that remain within one day.
-- [ ] Test quiet hours that cross midnight.
+- [x] Test quiet hours that cross midnight.
 - [x] Test local snooze creation and expiry.
 - [x] Test tomorrow snooze due-date modification and stale snooze removal.
-- [ ] Test snooze replacement and cross-midnight expiry.
+- [x] Test snooze replacement.
+- [ ] Test snooze expiry across midnight.
 - [x] Test notification manifest updates and unchanged-task suppression.
 - [x] Test swipe dismissal followed by restoration on the next scan.
 - [x] Test completed, missing, already-active, and already-stopped action states.
 - [x] Test channel creation, caching, routing, failure fallback, and recovery.
 - [x] Add shell syntax and Python compilation checks.
 - [x] Add `shellcheck` checks.
-- [ ] Add GitHub Actions to run the complete test suite.
+- [x] Add GitHub Actions to run the complete test suite.
 
 ### Completion Criteria
 

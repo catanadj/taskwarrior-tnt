@@ -232,6 +232,33 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertIn("Quiet hours active", result.stdout)
         self.assertFalse(any(line.startswith("termux-notification ") for line in self.calls()))
 
+    def test_quiet_hours_crossing_midnight(self) -> None:
+        self.task(
+            "7" * 36,
+            "early task",
+            datetime(2026, 8, 12, 6, 30),
+        )
+
+        during = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-12T06:00:00+00:00",
+            TW_QUIET_HOURS_ENABLED="1",
+            TW_QUIET_HOURS_START="22:00",
+            TW_QUIET_HOURS_END="07:00",
+        )
+        self.assertIn("Quiet hours active", during.stdout)
+        self.assertFalse(any(line.startswith("termux-notification ") for line in self.calls()))
+
+        after = self.run_script(
+            "taskwarrior_notify_due_tasks.sh",
+            TW_TEST_NOW="2026-08-12T07:00:00+00:00",
+            TW_QUIET_HOURS_ENABLED="1",
+            TW_QUIET_HOURS_START="22:00",
+            TW_QUIET_HOURS_END="07:00",
+            TW_WINDOW_FUTURE_HOURS="2",
+        )
+        self.assertIn("Tracked 1", after.stdout)
+
     def test_local_snooze_expires_and_task_reappears(self) -> None:
         uuid = "99999999-0000-0000-0000-000000000000"
         self.task(uuid, "snoozed task", datetime(2026, 8, 12, 13, 30))
@@ -352,6 +379,30 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertFalse(any(line.startswith("task ") for line in calls))
         self.assertIn("termux-toast " + uuid[:8] + " already active", calls)
         self.assertIn("termux-toast " + uuid[:8] + " already stopped", calls)
+
+    def test_snooze_replacement_keeps_one_current_entry(self) -> None:
+        uuid = "66666666-0000-0000-0000-000000000000"
+        self.task(uuid, "replace snooze", datetime(2026, 8, 12, 15, 0))
+
+        self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "765434",
+            "1h",
+            TW_TEST_NOW="2026-08-12T13:00:00+00:00",
+        )
+        self.run_script(
+            "taskwarrior_snooze_task.sh",
+            uuid,
+            "765435",
+            "1h",
+            TW_TEST_NOW="2026-08-12T14:00:00+00:00",
+        )
+
+        entries = (self.state_dir / "snoozed-tasks").read_text().splitlines()
+        self.assertEqual(1, len(entries))
+        self.assertTrue(entries[0].startswith(uuid + "\t"))
+        self.assertGreater(int(entries[0].split("\t", 1)[1]), 0)
 
     def test_missing_task_snooze_clears_notification(self) -> None:
         uuid = "ffffffff-0000-0000-0000-000000000000"

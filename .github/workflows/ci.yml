@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+
+      - name: Check shell syntax
+        run: bash -n install.sh scripts/*.sh
+
+      - name: Run ShellCheck
+        run: shellcheck install.sh scripts/*.sh
+
+      - name: Compile Python files
+        run: >-
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/taskwarrior-tnt-pycache"
+          python -m py_compile scripts/taskwarrior_gui.py tests/test_tnt.py
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Run tests
+        run: PYTHONPATH=. python -m unittest discover -s tests -v
