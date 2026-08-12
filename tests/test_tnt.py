@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 import os
 import shutil
 import stat
@@ -13,12 +13,14 @@ import sys
 import tempfile
 import types
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+FIXED_NOW = datetime(2026, 8, 12, 13, 0, tzinfo=timezone(timedelta(hours=3)))
+FIXED_NOW_VALUE = "2026-08-12T13:00:00+03:00"
 
 
 class TntHarness(unittest.TestCase):
@@ -52,8 +54,8 @@ class TntHarness(unittest.TestCase):
         self._write_executable(
             path,
             """#!/usr/bin/env python3
-import json
 import importlib.util
+import json
 import os
 import sys
 
@@ -119,6 +121,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
                 "TW_START_STOP_SCRIPT": str(SCRIPTS / "taskwarrior_start_stop_task.sh"),
                 "TW_NOTIFY_SCRIPT": str(SCRIPTS / "taskwarrior_notify_due_tasks.sh"),
                 "TW_JOT_TIMELOG_ENABLED": "0",
+                "TW_TEST_NOW": FIXED_NOW_VALUE,
                 "TW_WINDOW_PAST_HOURS": "2",
                 "TW_WINDOW_FUTURE_HOURS": "2",
                 "TW_MAX_TASKS": "12",
@@ -162,7 +165,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         )
 
     def test_channels_are_created_once_and_notifications_are_routed(self) -> None:
-        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        now = FIXED_NOW
         self.task("a" * 36, "overdue", now - timedelta(hours=3))
         self.task("b" * 36, "window", now + timedelta(minutes=30))
 
@@ -179,7 +182,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertTrue(any("--channel taskwarrior-tnt-overdue" in line for line in notifications))
 
     def test_active_and_window_tasks_beat_overdue_backlog(self) -> None:
-        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        now = FIXED_NOW
         self.task("a" * 36, "old overdue", now - timedelta(hours=3))
         self.task("b" * 36, "active", now - timedelta(minutes=30))
         self.task("c" * 36, "window", now + timedelta(minutes=30))
@@ -289,7 +292,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
 
     def test_tomorrow_snooze_uses_explicit_due_modifier(self) -> None:
         uuid = "88888888-0000-0000-0000-000000000000"
-        self.task(uuid, "tomorrow task", datetime.now().astimezone())
+        self.task(uuid, "tomorrow task", FIXED_NOW)
 
         self.run_script("taskwarrior_snooze_task.sh", uuid, "765433", "tomorrow")
 
@@ -299,7 +302,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         )
 
     def test_channel_failure_falls_back_to_default_channel(self) -> None:
-        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        now = FIXED_NOW
         self.task("a" * 36, "window", now + timedelta(minutes=30))
 
         result = self.run_script(
@@ -315,7 +318,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertNotIn("--channel ", notifications[0])
 
     def test_dismissed_notification_returns_on_next_scan(self) -> None:
-        now = datetime.now().astimezone().replace(second=0, microsecond=0)
+        now = FIXED_NOW
         self.task("b" * 36, "window", now + timedelta(minutes=30))
 
         self.run_script("taskwarrior_notify_due_tasks.sh")

@@ -46,7 +46,7 @@ This checklist prioritizes work that improves both the Android experience and th
 ### Completion Criteria
 
 - [x] Tests run without Android, Tasker, Termux:API, or a real Taskwarrior database.
-- [ ] Time-dependent tests do not use the real clock.
+- [x] Time-dependent tests do not use the real clock.
 - [ ] Every current notification action has success, stale-state, and failure coverage.
 
 ## Phase 2: Extract A Shared Python Core
