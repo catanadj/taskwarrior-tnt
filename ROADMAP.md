@@ -131,7 +131,7 @@ taskwarrior_tnt/
 - [x] Add configurable command timeouts.
 - [ ] Add bounded log rotation.
 - [ ] Quote notification action commands safely when paths contain spaces or shell characters.
-- [ ] Document which environment variables remain supported as one-off overrides.
+- [x] Document which environment variables remain supported as one-off overrides.
 
 ### Completion Criteria
 
@@ -203,7 +203,7 @@ taskwarrior_tnt/
 ## Phase 8: Release And Maintenance Quality
 
 - [ ] Add `.gitignore` entries for Python, editor, and test artifacts.
-- [ ] Add release notes and semantic version tags.
+- [x] Add release notes and semantic version tags.
 - [ ] Test installation over an existing configuration.
 - [ ] Test clean installation in a fresh Termux environment.
 - [ ] Add a concise upgrade guide for configuration and state migrations.
