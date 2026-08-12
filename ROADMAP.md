@@ -60,7 +60,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Add typed manifest and snooze file operations in `state.py`.
 - [x] Add an Android command adapter in `android.py`.
 - [x] Add state-aware Start, Stop, Done, and due-modification planning in `actions.py`.
-- [ ] Isolate Jot support behind an integration interface.
+- [x] Isolate Jot support behind an integration interface.
 - [ ] Make the notifier and GUI consume the same task-selection and formatting code.
 - [ ] Retire embedded Python heredocs from shell scripts.
 - [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.

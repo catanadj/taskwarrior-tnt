@@ -36,6 +36,7 @@ from taskwarrior_tnt.state import (
 )
 from taskwarrior_tnt.android import Android, AndroidCommandError
 from taskwarrior_tnt.actions import ActionStatus, plan_due_modifier, plan_task_action
+from taskwarrior_tnt.integrations import IntegrationStatus, JotIntegration
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -491,6 +492,29 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         modify = plan_due_modifier(uuid, "due:due+1d", "pending")
         self.assertEqual("modify", modify.action)
         self.assertEqual("due:due+1d", modify.task_args[-1])
+
+    def test_jot_integration_reports_disabled_missing_success_and_failure(self) -> None:
+        uuid = "16161616-0000-0000-0000-000000000000"
+        self.assertEqual(
+            IntegrationStatus.DISABLED,
+            JotIntegration(enabled=False).run("start", uuid).status,
+        )
+        self.assertEqual(
+            IntegrationStatus.MISSING,
+            JotIntegration(binary=str(self.bin_dir / "missing-jot")).run("start", uuid).status,
+        )
+
+        success = self.bin_dir / "jot-success"
+        self._write_executable(success, "#!/usr/bin/env bash\nprintf 'logged'\n")
+        result = JotIntegration(binary=str(success), enabled=True).run("start", uuid)
+        self.assertEqual(IntegrationStatus.OK, result.status)
+        self.assertEqual("logged", result.output)
+
+        failure = self.bin_dir / "jot-failure"
+        self._write_executable(failure, "#!/usr/bin/env bash\necho 'jot failed' >&2\nexit 3\n")
+        result = JotIntegration(binary=str(failure)).run("stop", uuid)
+        self.assertEqual(IntegrationStatus.FAILED, result.status)
+        self.assertEqual("jot failed", result.output)
 
     def test_completed_done_action_clears_stale_notification_without_mutation(self) -> None:
         uuid = "dddddddd-0000-0000-0000-000000000000"
