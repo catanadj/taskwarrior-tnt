@@ -19,6 +19,7 @@ from pathlib import Path
 from taskwarrior_tnt.formatting import (
     clean_text,
     format_delta,
+    format_elapsed,
     parse_iso_duration,
     parse_task_date,
 )
@@ -389,6 +390,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual(timedelta(minutes=10), parse_iso_duration("PT10M"))
         self.assertIsNone(parse_iso_duration("invalid"))
         self.assertEqual("1h 5m", format_delta(timedelta(hours=1, minutes=5)))
+        self.assertEqual("1h 5m", format_elapsed(0, 3900))
         self.assertIsNotNone(parse_task_date("20260812T130000Z"))
 
     def test_shared_policy_assigns_buckets_and_priority(self) -> None:

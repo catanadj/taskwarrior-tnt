@@ -109,28 +109,8 @@ run_jot_command() {
 }
 
 format_duration() {
-  python3 - "$1" <<'PY'
-import sys
-import time
-
-try:
-    seconds = max(0, int(time.time()) - int(sys.argv[1]))
-except (IndexError, ValueError):
-    raise SystemExit(1)
-
-minutes = max(1, (seconds + 59) // 60)
-hours, remaining_minutes = divmod(minutes, 60)
-days, remaining_hours = divmod(hours, 24)
-
-parts = []
-if days:
-    parts.append(f"{days}d")
-if remaining_hours:
-    parts.append(f"{remaining_hours}h")
-if remaining_minutes and not days:
-    parts.append(f"{remaining_minutes}m")
-print(" ".join(parts) if parts else "0m")
-PY
+  PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m taskwarrior_tnt.formatting "$1"
 }
 
 if [[ -z "$TASK_UUID" ]]; then

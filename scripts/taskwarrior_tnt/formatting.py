@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -60,3 +61,26 @@ def format_delta(delta: timedelta) -> str:
     if remaining_minutes and not days:
         parts.append(f"{remaining_minutes}m")
     return " ".join(parts) if parts else "0m"
+
+
+def format_elapsed(start_epoch: int, now_epoch: int | None = None) -> str:
+    seconds = max(0, int(time.time() if now_epoch is None else now_epoch) - int(start_epoch))
+    minutes = max(1, (seconds + 59) // 60)
+    hours, remaining_minutes = divmod(minutes, 60)
+    days, remaining_hours = divmod(hours, 24)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if remaining_hours:
+        parts.append(f"{remaining_hours}h")
+    if remaining_minutes and not days:
+        parts.append(f"{remaining_minutes}m")
+    return " ".join(parts) if parts else "0m"
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit(2)
+    print(format_elapsed(int(sys.argv[1]), int(sys.argv[2]) if len(sys.argv) == 3 else None))

@@ -68,6 +68,7 @@ This checklist prioritizes work that improves both the Android experience and th
 - [x] Retire the notifier record-generation heredoc.
 - [x] Retire the legacy window-reminder heredoc.
 - [x] Retire the shared Taskwarrior snapshot-parser heredoc.
+- [x] Retire the action-script duration-formatting heredocs.
 - [x] Retire duplicated parsing logic from `taskwarrior_window_reminders.sh`.
 - [ ] Preserve current behavior through characterization tests during extraction.
 
