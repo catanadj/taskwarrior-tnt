@@ -762,6 +762,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
                 "chainID": "nautical-chain",
                 "link": 3,
                 "chainMax": 20,
+                "anchor": "w:mon..fri@t=09:00,17:00",
             }
         ]
         self.run_script("taskwarrior_complete_task.sh", uuid, TNT_TEST_UUID=uuid)

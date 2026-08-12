@@ -11,6 +11,7 @@ TNT_TASK_START_EPOCH=""
 TNT_TASK_CHAIN_ID=""
 TNT_TASK_LINK=""
 TNT_TASK_CHAIN_MAX=""
+TNT_TASK_RECURRENCE=""
 TNT_TASK_SNAPSHOT_ERROR=""
 
 tnt_acquire_state_lock() {
@@ -113,6 +114,7 @@ tnt_load_task_snapshot() {
   TNT_TASK_CHAIN_ID=""
   TNT_TASK_LINK=""
   TNT_TASK_CHAIN_MAX=""
+  TNT_TASK_RECURRENCE=""
   TNT_TASK_SNAPSHOT_ERROR=""
 
   if ! output="$("$task_bin" rc.hooks:off rc.verbose:nothing rc.json.array:on "$task_uuid" export 2>&1)"; then
@@ -126,6 +128,6 @@ tnt_load_task_snapshot() {
     return 2
   fi
 
-  IFS='|' read -r TNT_TASK_STATUS TNT_TASK_START_EPOCH TNT_TASK_CHAIN_ID TNT_TASK_LINK TNT_TASK_CHAIN_MAX <<< "$parsed"
+  IFS='|' read -r TNT_TASK_STATUS TNT_TASK_START_EPOCH TNT_TASK_CHAIN_ID TNT_TASK_LINK TNT_TASK_CHAIN_MAX TNT_TASK_RECURRENCE <<< "$parsed"
   [[ -n "$TNT_TASK_STATUS" ]] || TNT_TASK_STATUS="unknown"
 }

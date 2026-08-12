@@ -224,7 +224,8 @@ else
   log_action "WARN completion progress unavailable"
 fi
 
-if [[ "$TNT_TASK_LINK" =~ ^[0-9]+$ && "$TNT_TASK_CHAIN_MAX" =~ ^[0-9]+$ &&
+if [[ "$TNT_TASK_RECURRENCE" == *"@t="* &&
+      "$TNT_TASK_LINK" =~ ^[0-9]+$ && "$TNT_TASK_CHAIN_MAX" =~ ^[0-9]+$ &&
       "$TNT_TASK_CHAIN_MAX" -ge "$TNT_TASK_LINK" ]]; then
   nautical_remaining=$((TNT_TASK_CHAIN_MAX - TNT_TASK_LINK))
   PROGRESS_MESSAGE="Task $TNT_TASK_LINK out of $TNT_TASK_CHAIN_MAX complete; $nautical_remaining remaining"

@@ -130,7 +130,7 @@ def normalize_tasks(items: list[Mapping[str, object]]) -> list[TaskRecord]:
     return [record for item in items if (record := normalize_task(item)) is not None]
 
 
-def snapshot(task_bin: str, uuid: str) -> tuple[str, str, str, str, str]:
+def snapshot(task_bin: str, uuid: str) -> tuple[str, str, str, str, str, str]:
     """Return status, start epoch, and optional Nautical recurrence fields."""
     result = subprocess.run(
         [task_bin, "rc.hooks:off", "rc.verbose:nothing", "rc.json.array:on", uuid, "export"],
@@ -146,7 +146,7 @@ def snapshot(task_bin: str, uuid: str) -> tuple[str, str, str, str, str]:
         raise TaskwarriorCommandError(f"invalid Taskwarrior JSON: {exc}") from exc
     task = next((item for item in tasks if item.get("uuid") == uuid), None)
     if task is None:
-        return "missing", "", "", "", ""
+        return "missing", "", "", "", "", ""
     started = ""
     value = task.get("start")
     if value:
@@ -168,13 +168,14 @@ def snapshot(task_bin: str, uuid: str) -> tuple[str, str, str, str, str]:
         str(task.get("chainID") or ""),
         str(task.get("link") or ""),
         str(task.get("chainMax") or ""),
+        str(task.get("anchor") or task.get("cp") or ""),
     )
 
 
 if __name__ == "__main__" and len(sys.argv) == 4 and sys.argv[1] == "snapshot":
     try:
-        status, started, chain_id, link, chain_max = snapshot(sys.argv[2], sys.argv[3])
-        print(f"{status}|{started}|{chain_id}|{link}|{chain_max}")
+        status, started, chain_id, link, chain_max, recurrence = snapshot(sys.argv[2], sys.argv[3])
+        print(f"{status}|{started}|{chain_id}|{link}|{chain_max}|{recurrence}")
     except TaskwarriorCommandError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2)
