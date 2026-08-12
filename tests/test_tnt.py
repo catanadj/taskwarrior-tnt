@@ -493,6 +493,7 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual(("next", "focus"), task.tags)
         self.assertEqual(timedelta(minutes=10), task.duration)
         self.assertTrue(task.started)
+        self.assertIsNotNone(task.started_at)
         self.assertEqual(1, len(normalize_tasks([raw, {"description": "missing due"}])))
 
     def test_taskwarrior_adapter_keeps_active_task_without_due(self) -> None:

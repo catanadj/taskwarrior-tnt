@@ -103,6 +103,7 @@ def normalize_task(item: Mapping[str, object]) -> TaskRecord | None:
     """Convert one raw Taskwarrior export object into a typed task record."""
     uuid = clean_text(item.get("uuid"))
     started = bool(item.get("start"))
+    started_at = parse_task_date(clean_text(item.get("start"))) if started else None
     due = parse_task_date(clean_text(item.get("due")))
     if not uuid or (due is None and not started):
         return None
@@ -121,6 +122,7 @@ def normalize_task(item: Mapping[str, object]) -> TaskRecord | None:
         duration=parse_iso_duration(clean_text(item.get("duration"))),
         urgency=urgency,
         started=started,
+        started_at=started_at,
     )
 
 

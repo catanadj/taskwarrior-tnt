@@ -18,6 +18,7 @@ class TaskRecord:
     duration: timedelta | None = None
     urgency: float = 0.0
     started: bool = False
+    started_at: datetime | None = None
 
 
 @dataclass(frozen=True)

@@ -54,7 +54,13 @@ def build_reminders(
             status = "NOW"
         else:
             status = "DUE"
-        if task.due is None:
+        if task.started:
+            delta = (
+                f"active for {format_delta(now - task.started_at)}"
+                if task.started_at
+                else "active"
+            )
+        elif task.due is None:
             delta = "active"
         elif now < start_time:
             delta = f"starts in {format_delta(start_time - now)}"
