@@ -463,6 +463,18 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertTrue(task.started)
         self.assertEqual(1, len(normalize_tasks([raw, {"description": "missing due"}])))
 
+    def test_taskwarrior_adapter_keeps_active_task_without_due(self) -> None:
+        raw = {
+            "uuid": "1a1a1a1a-0000-0000-0000-000000000000",
+            "description": "active without due",
+            "start": "20260812T130000",
+        }
+        task = normalize_task(raw)
+        self.assertIsNotNone(task)
+        assert task is not None
+        self.assertIsNone(task.due)
+        self.assertTrue(task.started)
+
     def test_shared_reminder_builder_matches_display_contract(self) -> None:
         tasks = [
             TaskRecord(
@@ -498,6 +510,18 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         reminders = build_reminders([task], FIXED_NOW, 2, 2, 5, always_show_active=True)
         self.assertEqual(1, len(reminders))
         self.assertEqual("ACTIVE", reminders[0].content.split(" | ")[0])
+
+    def test_always_show_active_keeps_active_task_without_due(self) -> None:
+        task = TaskRecord(
+            "21212121-0000-0000-0000-000000000000",
+            None,
+            description="active without due",
+            started=True,
+        )
+        reminders = build_reminders([task], FIXED_NOW, 2, 2, 5, always_show_active=True)
+        self.assertEqual(1, len(reminders))
+        self.assertIn("Active | active without due", reminders[0].title)
+        self.assertIn("ACTIVE | active", reminders[0].content)
 
     def test_configuration_validation_accepts_defaults_and_rejects_invalid_values(self) -> None:
         self.assertEqual([], validate({}))

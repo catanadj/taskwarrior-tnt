@@ -11,7 +11,7 @@ class TaskRecord:
     """Normalized fields used from a Taskwarrior export record."""
 
     uuid: str
-    due: datetime
+    due: datetime | None
     description: str = ""
     project: str = ""
     tags: tuple[str, ...] = ()

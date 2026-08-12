@@ -64,14 +64,32 @@ def export_pending(
         ) from exc
     if not isinstance(payload, list):
         raise TaskwarriorCommandError("task export did not return a JSON array")
-    return [item for item in payload if isinstance(item, dict)]
+
+    # A due-date query omits active tasks without a due date. Fetch those
+    # separately so an active task remains visible and actionable.
+    active_result = _run_export(task_bin, [*common, "start.any", "export"], env)
+    if active_result.returncode == 0:
+        try:
+            active_payload = json.loads(active_result.stdout or "[]")
+        except json.JSONDecodeError:
+            active_payload = []
+        if isinstance(active_payload, list):
+            payload.extend(item for item in active_payload if isinstance(item, dict))
+
+    unique: dict[str, dict[str, object]] = {}
+    for item in payload:
+        if isinstance(item, dict):
+            key = str(item.get("uuid") or len(unique))
+            unique[key] = item
+    return list(unique.values())
 
 
 def normalize_task(item: Mapping[str, object]) -> TaskRecord | None:
     """Convert one raw Taskwarrior export object into a typed task record."""
     uuid = clean_text(item.get("uuid"))
+    started = bool(item.get("start"))
     due = parse_task_date(clean_text(item.get("due")))
-    if not uuid or due is None:
+    if not uuid or (due is None and not started):
         return None
     raw_tags = item.get("tags") or ()
     tags = tuple(clean_text(tag) for tag in raw_tags if clean_text(tag)) if isinstance(raw_tags, (list, tuple)) else ()
@@ -87,7 +105,7 @@ def normalize_task(item: Mapping[str, object]) -> TaskRecord | None:
         tags=tags,
         duration=parse_iso_duration(clean_text(item.get("duration"))),
         urgency=urgency,
-        started=bool(item.get("start")),
+        started=started,
     )
 
 

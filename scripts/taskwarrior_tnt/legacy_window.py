@@ -20,6 +20,8 @@ def render(past_hours: float, future_hours: float, max_tasks: int) -> list[str]:
     tasks = normalize_tasks(export_pending(os.environ.get("TASK_BIN", "task"), now, future_hours))
     matches = []
     for task in tasks:
+        if task.due is None:
+            continue
         if not start <= task.due <= end:
             continue
         uuid = task.uuid[:8]

@@ -21,23 +21,29 @@ def build_reminders(
     snoozed = snoozed or set()
     reminders: list[Reminder] = []
     for task in tasks:
+        if task.due is None and not task.started:
+            continue
+        effective_due = task.due or now
         if task.uuid in snoozed:
             continue
         bucket = (
             "window"
             if always_show_active and task.started
-            else reminder_bucket(task.due, now, past_hours, future_hours)
+            else reminder_bucket(effective_due, now, past_hours, future_hours)
         )
         if bucket is None:
             continue
         action = "stop" if task.started else "start"
         button = "Stop" if task.started else "Start"
-        if task.duration:
+        if task.due is None:
+            start_time = now
+            time_text = "Active"
+        elif task.duration:
             start_time = task.due - task.duration
             time_text = f"{start_time:%H:%M} - {task.due:%H:%M}"
         else:
-            start_time = task.due
-            time_text = f"Due {task.due:%H:%M}"
+            start_time = effective_due
+            time_text = f"Due {effective_due:%H:%M}"
         if task.started:
             status = "ACTIVE"
         elif bucket == "overdue":
@@ -48,7 +54,9 @@ def build_reminders(
             status = "NOW"
         else:
             status = "DUE"
-        if now < start_time:
+        if task.due is None:
+            delta = "active"
+        elif now < start_time:
             delta = f"starts in {format_delta(start_time - now)}"
         elif now > task.due:
             delta = f"due {format_delta(now - task.due)} ago"
@@ -67,7 +75,7 @@ def build_reminders(
                 content=" | ".join(details),
                 action=action,
                 button=button,
-                due=task.due,
+                due=effective_due,
                 urgency=task.urgency,
             )
         )

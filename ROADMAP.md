@@ -143,7 +143,7 @@ taskwarrior_tnt/
 
 ### Active Tasks
 
-- [ ] Add `always_show_active` so active tasks appear without a due date or outside today's window.
+- [x] Add `always_show_active` so active tasks appear without a due date or outside today's window.
 - [x] Add `TW_ALWAYS_SHOW_ACTIVE` support for active tasks outside the normal window.
 - [ ] Add an optional ongoing notification for active tasks.
 - [ ] Display current active duration where Android allows useful refresh behavior.
