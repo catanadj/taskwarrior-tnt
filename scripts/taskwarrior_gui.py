@@ -41,6 +41,7 @@ DEFAULT_CONFIG = os.path.expanduser("~/.termux/tasker/taskwarrior_tasker.conf")
 @dataclass
 class Config:
     task_bin: str = "task"
+    task_filter: str = ""
     past_hours: float = 2
     future_hours: float = 2
     max_tasks: int = 12
@@ -103,6 +104,7 @@ def load_config(path: str) -> Config:
     )
     return Config(
         task_bin=values.get("TASK_BIN", "task"),
+        task_filter=values.get("TW_TASK_FILTER", ""),
         past_hours=num("TW_WINDOW_PAST_HOURS", 2),
         future_hours=num("TW_WINDOW_FUTURE_HOURS", 2),
         max_tasks=integer("TW_MAX_TASKS", 12),
@@ -217,7 +219,14 @@ def load_tasks(config: Config) -> tuple[list[TaskRow], str]:
 
     now = datetime.now().astimezone()
     try:
-        tasks = normalize_tasks(export_pending(config.task_bin, now, config.future_hours))
+        tasks = normalize_tasks(
+            export_pending(
+                config.task_bin,
+                now,
+                config.future_hours,
+                task_filter=config.task_filter,
+            )
+        )
     except TaskwarriorCommandError as exc:
         return [], str(exc)
 

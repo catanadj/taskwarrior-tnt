@@ -151,7 +151,7 @@ taskwarrior_tnt/
 
 ### Filtering And Policies
 
-- [ ] Add a configurable Taskwarrior filter for eligible reminders.
+- [x] Add a configurable Taskwarrior filter for eligible reminders.
 - [ ] Add project and tag include/exclude rules.
 - [ ] Add an opt-out tag or UDA for individual tasks.
 - [ ] Allow different reminder windows by project, tag, or urgency.

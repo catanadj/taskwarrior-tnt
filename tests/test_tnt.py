@@ -434,6 +434,16 @@ printf '%s %s\\n' "${{0##*/}}" "$*" >> "${{TNT_TEST_CALLS}}"
         self.assertEqual(uuid, tasks[0]["uuid"])
         self.assertIn("rc.hooks:off", self.export_calls_file.read_text())
 
+    def test_taskwarrior_adapter_applies_configured_filter(self) -> None:
+        export_pending(
+            str(self.bin_dir / "task"),
+            FIXED_NOW,
+            2,
+            env=self._env(),
+            task_filter="+next project:work",
+        )
+        self.assertIn("+next project:work", self.export_calls_file.read_text())
+
     def test_taskwarrior_adapter_reports_invalid_export(self) -> None:
         bad_task = self.bin_dir / "bad-task"
         self._write_executable(

@@ -37,7 +37,14 @@ def generate_records(
     now_epoch = int(now.timestamp())
     snoozed = read_snoozes(snooze_file, now_epoch)
     task_bin = os.environ.get("TASK_BIN", "task")
-    tasks = normalize_tasks(export_pending(task_bin, now, future_hours))
+    tasks = normalize_tasks(
+        export_pending(
+            task_bin,
+            now,
+            future_hours,
+            task_filter=os.environ.get("TW_TASK_FILTER", ""),
+        )
+    )
     reminders = build_reminders(
         tasks,
         now,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -37,6 +38,7 @@ def export_pending(
     future_hours: float,
     *,
     env: Mapping[str, str] | None = None,
+    task_filter: str = "",
 ) -> list[dict[str, object]]:
     """Export pending tasks, preferring a bounded due-date query."""
     end = now + timedelta(hours=future_hours)
@@ -46,13 +48,14 @@ def export_pending(
         "rc.json.array:on",
         "status:pending",
     ]
+    filter_args = shlex.split(task_filter) if task_filter.strip() else []
     result = _run_export(
         task_bin,
-        [*common, f"due.before:{end.strftime('%Y%m%dT%H%M%S')}", "export"],
+        [*common, *filter_args, f"due.before:{end.strftime('%Y%m%dT%H%M%S')}", "export"],
         env,
     )
     if result.returncode != 0:
-        result = _run_export(task_bin, [*common, "export"], env)
+        result = _run_export(task_bin, [*common, *filter_args, "export"], env)
     if result.returncode != 0:
         message = " ".join((result.stderr or result.stdout or "").split())
         raise TaskwarriorCommandError(message or "task export failed")
@@ -67,7 +70,9 @@ def export_pending(
 
     # A due-date query omits active tasks without a due date. Fetch those
     # separately so an active task remains visible and actionable.
-    active_result = _run_export(task_bin, [*common, "start.any", "export"], env)
+    active_result = _run_export(
+        task_bin, [*common, *filter_args, "start.any", "export"], env
+    )
     if active_result.returncode == 0:
         try:
             active_payload = json.loads(active_result.stdout or "[]")
