@@ -6,4 +6,5 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+.worktrees/
 .DS_Store
