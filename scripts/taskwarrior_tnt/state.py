@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import os
+import fcntl
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -112,37 +113,30 @@ def migrate_to_json(state_dir: str | Path, output: str | Path | None = None) -> 
 
 
 @contextmanager
-def state_lock(state_dir: str | Path, timeout: float = 10.0, stale_after: float = 60.0):
-    """Acquire the same mkdir-based lock convention used by shell clients."""
+def state_lock(state_dir: str | Path, timeout: float = 10.0):
+    """Acquire the advisory state lock shared by TNT clients."""
     directory = Path(state_dir)
-    lock_dir = directory / ".state.lock"
     directory.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            lock_dir.mkdir()
-            (lock_dir / "pid").write_text(str(os.getpid()))
-            (lock_dir / "epoch").write_text(str(int(time.time())))
-            break
-        except FileExistsError:
-            try:
-                epoch = int((lock_dir / "epoch").read_text())
-            except (OSError, ValueError):
-                epoch = int(time.time())
-            if time.time() - epoch > stale_after:
-                for child in lock_dir.iterdir():
-                    child.unlink(missing_ok=True)
-                lock_dir.rmdir()
-                continue
-            if time.monotonic() >= deadline:
-                raise TimeoutError("timed out waiting for Taskwarrior TNT state lock")
-            time.sleep(0.1)
+    lock_file = directory / ".state.lockfile"
+    descriptor = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        yield
+        os.fchmod(descriptor, 0o600)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("timed out waiting for Taskwarrior TNT state lock")
+                time.sleep(min(0.1, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
     finally:
-        for child in lock_dir.iterdir():
-            child.unlink(missing_ok=True)
-        lock_dir.rmdir()
+        os.close(descriptor)
 
 
 def _atomic_write(path: Path, content: str) -> None:

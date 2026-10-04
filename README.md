@@ -20,7 +20,7 @@ By default, pending tasks due from the last 2 hours through the next 2 hours are
 Install Termux packages:
 
 ```sh
-pkg install taskwarrior python termux-api
+pkg install taskwarrior python termux-api util-linux
 pip install termuxgui
 ```
 
@@ -37,6 +37,12 @@ The installer copies scripts to `~/.termux/tasker`, preserves existing config
 values, appends any newly introduced options with their defaults, writes a
 pre-merge `.bak`, and writes the complete latest config as
 `taskwarrior_tasker.conf.example`. Repeated upgrades do not duplicate options.
+
+TNT uses `flock` from Termux's `util-linux` package to coordinate notification
+state updates across its scripts. Before upgrading, pause Tasker scans and
+notification actions. Upgrade all installed TNT scripts and Python modules
+together, then resume Tasker. Old and new versions use different lock formats
+and cannot coordinate while they run side by side.
 
 Useful tests:
 

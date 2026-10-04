@@ -445,6 +445,11 @@ run_doctor() {
   echo "Commands:"
   doctor_check_command "$TASK_BIN"
   doctor_check_command python3
+  if tnt_flock_available; then
+    echo "OK: util-linux flock found ($(command -v flock))"
+  else
+    echo "WARN: util-linux flock is required for shared state locking. Install it with: pkg install util-linux"
+  fi
   doctor_check_command termux-notification
   doctor_check_command termux-notification-channel
   doctor_check_command termux-notification-remove

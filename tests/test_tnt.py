@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -724,6 +725,38 @@ class SchedulerService:
         self.assertEqual(0, third.returncode, third.stderr)
         self.assertEqual(merged, config.read_text())
 
+    def test_flock_dependency_diagnostics(self) -> None:
+        toybox = self.bin_dir / "flock"
+        self._write_executable(toybox, '#!/bin/sh\necho "toybox"\n')
+        doctor = self.run_script("taskwarrior_notify_due_tasks.sh", "--doctor", check=False)
+        self.assertIn("util-linux flock", doctor.stdout)
+        self.assertIn("pkg install util-linux", doctor.stdout)
+
+        isolated_bin = self.temp_dir / "path without flock"
+        isolated_bin.mkdir()
+        for command in ("dirname", "mkdir", "cp", "chmod", "bash", "python3", "sed", "rm", "cat"):
+            resolved = shutil.which(command)
+            if resolved:
+                (isolated_bin / command).symlink_to(resolved)
+        missing_env = os.environ.copy()
+        missing_env.update({
+            "PATH": str(isolated_bin),
+            "HOME": str(self.temp_dir / "installer home"),
+            "TW_INSTALL_DIR": str(self.temp_dir / "installer home" / ".termux" / "tasker"),
+            "TW_INSTALL_RUN_CHECKS": "1",
+        })
+        install = subprocess.run(
+            ["/bin/bash", str(ROOT / "install.sh")],
+            cwd=ROOT,
+            env=missing_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, install.returncode, install.stderr)
+        self.assertIn("util-linux flock", install.stdout)
+        self.assertIn("pkg install util-linux", install.stdout)
+
     def test_shared_state_preserves_manifest_and_snooze_contracts(self) -> None:
         manifest = self.state_dir / "active-notifications"
         write_manifest(
@@ -742,9 +775,65 @@ class SchedulerService:
         remove_snooze(snoozes, "uuid-b")
         self.assertEqual({"uuid-a": 200}, read_snoozes(snoozes, 0))
 
+    def _start_state_lock_holder(self, hold_seconds: str = "30") -> subprocess.Popen[str]:
+        code = """import sys
+import time
+from taskwarrior_tnt.state import state_lock
+with state_lock(sys.argv[1]):
+    print('LOCKED', flush=True)
+    time.sleep(float(sys.argv[2]))
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = f"{SCRIPTS}:{ROOT}"
+        return subprocess.Popen(
+            [sys.executable, "-c", code, str(self.state_dir), hold_seconds],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+
+    def test_state_lock_uses_persistent_file_and_preserves_legacy_directory(self) -> None:
+        legacy_lock = self.state_dir / ".state.lock"
+        legacy_lock.mkdir(parents=True)
+
+        with state_lock(self.state_dir, timeout=0.05):
+            lock_file = self.state_dir / ".state.lockfile"
+            self.assertTrue(lock_file.is_file())
+            self.assertEqual(0o600, stat.S_IMODE(lock_file.stat().st_mode))
+            self.assertTrue(legacy_lock.is_dir())
+
+        self.assertTrue((self.state_dir / ".state.lockfile").is_file())
+
+    def test_state_lock_times_out_while_held(self) -> None:
+        import fcntl
+
+        lock_file = self.state_dir / ".state.lockfile"
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        with lock_file.open("a+") as holder:
+            fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(TimeoutError, "timed out"):
+                with state_lock(self.state_dir, timeout=0.05):
+                    self.fail("state_lock entered while another process held the lock")
+
+    def test_state_lock_releases_after_holder_exit(self) -> None:
+        holder = self._start_state_lock_holder("0.05")
+        self.assertEqual("LOCKED\n", holder.stdout.readline())
+        self.assertEqual(("", ""), holder.communicate(timeout=2))
+        self.assertEqual(0, holder.returncode)
+        with state_lock(self.state_dir, timeout=0.2):
+            self.assertTrue((self.state_dir / ".state.lockfile").is_file())
+
+        killed_holder = self._start_state_lock_holder()
+        self.assertEqual("LOCKED\n", killed_holder.stdout.readline())
+        killed_holder.kill()
+        killed_holder.communicate(timeout=2)
+        with state_lock(self.state_dir, timeout=0.2):
+            self.assertTrue((self.state_dir / ".state.lockfile").is_file())
+
     def test_shared_state_lock_is_released_and_reusable(self) -> None:
         with state_lock(self.state_dir):
-            self.assertTrue((self.state_dir / ".state.lock").is_dir())
+            self.assertTrue((self.state_dir / ".state.lockfile").is_file())
 
     def test_state_migration_writes_versioned_json_without_removing_legacy_files(self) -> None:
         manifest = self.state_dir / "active-notifications"
@@ -757,9 +846,163 @@ class SchedulerService:
         self.assertEqual("uuid", payload["active_notifications"][0]["uuid"])
         self.assertTrue(manifest.exists())
         self.assertTrue(snoozes.exists())
-        self.assertFalse((self.state_dir / ".state.lock").exists())
+        self.assertFalse((self.state_dir / ".state.lockfile").exists())
         with state_lock(self.state_dir):
-            self.assertTrue((self.state_dir / ".state.lock").is_dir())
+            self.assertTrue((self.state_dir / ".state.lockfile").is_file())
+
+    def _run_shell_lock(self, state_dir: Path, timeout: str, command: list[str]) -> subprocess.CompletedProcess[str]:
+        shell_code = 'source "$1"; shift; tnt_acquire_state_lock "$1" "$2"; rc=$?; if (( rc != 0 )); then exit "$rc"; fi; shift 2; "$@"; rc=$?; tnt_release_state_lock; exit "$rc"'
+        return subprocess.run(
+            [
+                "bash",
+                "-c",
+                shell_code,
+                "tnt-shell-lock-test",
+                str(SCRIPTS / "taskwarrior_tnt_common.sh"),
+                str(state_dir),
+                timeout,
+                *command,
+            ],
+            cwd=ROOT,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_shell_and_python_share_state_lock(self) -> None:
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        manifest = self.state_dir / "active-notifications"
+        manifest.write_text("100\tuuid-a\tfingerprint-a\n", encoding="utf-8")
+        forget_command = ["bash", "-c", 'printf "entered"']
+
+        with state_lock(self.state_dir):
+            result = self._run_shell_lock(self.state_dir, "0.05", forget_command)
+        self.assertEqual(75, result.returncode, result.stderr)
+        self.assertIn("timed out", result.stderr.lower())
+        self.assertEqual("100\tuuid-a\tfingerprint-a\n", manifest.read_text())
+
+        shell_holder = subprocess.Popen(
+            [
+                "bash",
+                "-c",
+                'source "$1"; tnt_acquire_state_lock "$2" "$3"; printf "LOCKED\\n"; read -r || true',
+                "tnt-shell-holder",
+                str(SCRIPTS / "taskwarrior_tnt_common.sh"),
+                str(self.state_dir),
+                "2",
+            ],
+            cwd=ROOT,
+            env=self._env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            text=True,
+        )
+        self.assertEqual("LOCKED\n", shell_holder.stdout.readline())
+        python_code = """import sys
+from taskwarrior_tnt.state import state_lock
+with state_lock(sys.argv[1], timeout=0.05):
+    print('ENTERED')
+"""
+        env = self._env()
+        env["PYTHONPATH"] = f"{SCRIPTS}:{ROOT}"
+        python_result = subprocess.run(
+            [sys.executable, "-c", python_code, str(self.state_dir)],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(0, python_result.returncode)
+        self.assertIn("timed out", python_result.stderr.lower())
+        shell_holder.communicate(timeout=3)
+        self.assertEqual(0, shell_holder.returncode)
+
+        killed_holder = subprocess.Popen(
+            [
+                "bash", "-c",
+                'source "$1"; tnt_acquire_state_lock "$2" 2; printf "LOCKED\\n"; read -r',
+                "tnt-shell-killed-holder", str(SCRIPTS / "taskwarrior_tnt_common.sh"), str(self.state_dir),
+            ],
+            cwd=ROOT,
+            env=self._env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            text=True,
+        )
+        self.assertEqual("LOCKED\n", killed_holder.stdout.readline())
+        killed_holder.kill()
+        killed_holder.communicate(timeout=2)
+        self.assertEqual(0, self._run_shell_lock(self.state_dir, "0.5", ["true"]).returncode)
+
+    def test_shell_state_lock_supports_paths_with_spaces(self) -> None:
+        spaced_state_dir = self.temp_dir / "state with spaces"
+        marker = self.temp_dir / "locked command ran"
+        result = self._run_shell_lock(
+            spaced_state_dir,
+            "2",
+            ["bash", "-c", 'printf "ok" > "$1"', "tnt-marker", str(marker)],
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("ok", marker.read_text())
+        self.assertTrue((spaced_state_dir / ".state.lockfile").is_file())
+
+    def test_scan_sync_runs_before_state_lock(self) -> None:
+        order_log = self.temp_dir / "sync and flock order.log"
+        sync_script = self.temp_dir / "sync-helper.sh"
+        self._write_executable(
+            sync_script,
+            '#!/bin/bash\nprintf "sync\\n" >> "$TNT_TEST_ORDER_LOG"\n',
+        )
+        flock_wrapper = self.bin_dir / "flock"
+        self._write_executable(
+            flock_wrapper,
+            """#!/bin/bash
+if [[ "${1:-}" != "--version" ]]; then
+    printf "flock\\n" >> "$TNT_TEST_ORDER_LOG"
+fi
+exec /usr/bin/flock "$@"
+""",
+        )
+        env = self._env(
+            TW_SYNC_BEFORE_SCAN_ENABLED="1",
+            TW_SYNC_SCRIPT=str(sync_script),
+            TW_SYNC_TIMEOUT_SECONDS="2",
+            TNT_TEST_ORDER_LOG=str(order_log),
+        )
+        scan: subprocess.Popen[str] | None = None
+        try:
+            with state_lock(self.state_dir):
+                scan = subprocess.Popen(
+                    ["bash", str(SCRIPTS / "taskwarrior_notify_due_tasks.sh")],
+                    cwd=ROOT,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    lines = order_log.read_text().splitlines() if order_log.exists() else []
+                    if lines[:2] == ["sync", "flock"]:
+                        break
+                    if scan.poll() is not None:
+                        break
+                    time.sleep(0.01)
+                self.assertEqual(["sync", "flock"], order_log.read_text().splitlines()[:2])
+                self.assertIsNone(scan.poll(), "scan should wait for the held state lock")
+
+            stdout, stderr = scan.communicate(timeout=5)
+        finally:
+            if scan is not None and scan.stdout is not None and not scan.stdout.closed:
+                if scan.poll() is None:
+                    scan.kill()
+                scan.communicate(timeout=5)
+        self.assertEqual(0, scan.returncode, f"stdout: {stdout}\nstderr: {stderr}")
+        self.assertEqual(["sync", "flock"], order_log.read_text().splitlines()[:2])
 
     def test_android_adapter_builds_termux_api_commands(self) -> None:
         android = Android(

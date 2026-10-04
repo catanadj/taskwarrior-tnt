@@ -138,6 +138,12 @@ if [[ "$RUN_CHECKS" == "1" ]]; then
     fi
   done
 
+  if command -v flock >/dev/null 2>&1 && [[ "$(flock --version 2>/dev/null)" == *"util-linux"* ]]; then
+    echo "OK: util-linux flock found"
+  else
+    echo "WARN: util-linux flock is required for shared state locking. Install it with: pkg install util-linux"
+  fi
+
   if command -v termux-notification >/dev/null 2>&1; then
     echo "OK: termux-notification found"
   else

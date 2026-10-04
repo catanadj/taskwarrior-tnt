@@ -4,65 +4,77 @@
 # shellcheck disable=SC2034
 # These variables form the sourced helper API used by caller scripts.
 
-TNT_LOCK_OWNED=0
-TNT_LOCK_DIR=""
 TNT_TASK_STATUS=""
 TNT_TASK_START_EPOCH=""
 TNT_TASK_SNAPSHOT_ERROR=""
+TNT_STATE_LOCK_FD=""
+
+tnt_flock_available() {
+  local version
+  command -v flock >/dev/null 2>&1 || return 1
+  version="$(flock --version 2>/dev/null)" || return 1
+  [[ "$version" == *"util-linux"* ]]
+}
 
 tnt_acquire_state_lock() {
   local state_dir="$1"
   local timeout_seconds="${2:-10}"
-  local stale_seconds="${3:-60}"
-  local waited=0
-  local owner_pid owner_epoch now_epoch
+  local lock_file rc
 
   if [[ "${TW_STATE_LOCK_HELD:-0}" == "1" ]]; then
     return 0
   fi
 
-  mkdir -p "$state_dir"
-  TNT_LOCK_DIR="$state_dir/.state.lock"
+  if ! tnt_flock_available; then
+    echo "ERROR: util-linux flock is required; install it with: pkg install util-linux" >&2
+    return 127
+  fi
+  if [[ ! "$timeout_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "ERROR: state lock timeout must be a non-negative number of seconds" >&2
+    return 2
+  fi
+  if ! mkdir -p "$state_dir"; then
+    echo "ERROR: cannot create state directory: $state_dir" >&2
+    return 2
+  fi
 
-  while ! mkdir "$TNT_LOCK_DIR" 2>/dev/null; do
-    owner_pid=""
-    owner_epoch=""
-    if [[ -f "$TNT_LOCK_DIR/pid" ]]; then
-      IFS= read -r owner_pid < "$TNT_LOCK_DIR/pid" || true
-    fi
-    if [[ -f "$TNT_LOCK_DIR/epoch" ]]; then
-      IFS= read -r owner_epoch < "$TNT_LOCK_DIR/epoch" || true
-    fi
-    now_epoch="$(date +%s)"
+  lock_file="$state_dir/.state.lockfile"
+  if ! (umask 077; : >> "$lock_file") || ! chmod 600 "$lock_file"; then
+    echo "ERROR: cannot create state lock file: $lock_file" >&2
+    return 2
+  fi
 
-    if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
-      if ! kill -0 "$owner_pid" 2>/dev/null; then
-        rm -rf "$TNT_LOCK_DIR" 2>/dev/null || true
-        continue
-      fi
-    elif [[ "$owner_epoch" =~ ^[0-9]+$ ]] && (( now_epoch - owner_epoch > stale_seconds )); then
-      rm -rf "$TNT_LOCK_DIR" 2>/dev/null || true
-      continue
-    fi
-    if (( waited >= timeout_seconds * 10 )); then
-      echo "ERROR: timed out waiting for Taskwarrior TNT state lock" >&2
-      return 1
-    fi
-    sleep 0.1
-    waited=$((waited + 1))
-  done
+  if ! { exec {TNT_STATE_LOCK_FD}>>"$lock_file"; }; then
+    echo "ERROR: cannot open state lock file: $lock_file" >&2
+    return 2
+  fi
+  chmod 600 "$lock_file" || {
+    exec {TNT_STATE_LOCK_FD}>&-
+    TNT_STATE_LOCK_FD=""
+    echo "ERROR: cannot set state lock file permissions: $lock_file" >&2
+    return 2
+  }
 
-  printf '%s\n' "$$" > "$TNT_LOCK_DIR/pid"
-  date +%s > "$TNT_LOCK_DIR/epoch"
-  TNT_LOCK_OWNED=1
-  export TW_STATE_LOCK_HELD=1
+  if flock -E 75 -w "$timeout_seconds" "$TNT_STATE_LOCK_FD"; then
+    export TW_STATE_LOCK_HELD=1
+    return 0
+  else
+    rc=$?
+  fi
+  exec {TNT_STATE_LOCK_FD}>&-
+  TNT_STATE_LOCK_FD=""
+  if (( rc == 75 )); then
+    echo "ERROR: timed out waiting for Taskwarrior TNT state lock" >&2
+  fi
+  return "$rc"
 }
 
 tnt_release_state_lock() {
-  if [[ "$TNT_LOCK_OWNED" == "1" && -n "$TNT_LOCK_DIR" ]]; then
-    rm -rf "$TNT_LOCK_DIR" 2>/dev/null || true
+  if [[ -n "$TNT_STATE_LOCK_FD" ]]; then
+    flock -u "$TNT_STATE_LOCK_FD" || true
+    exec {TNT_STATE_LOCK_FD}>&-
+    TNT_STATE_LOCK_FD=""
   fi
-  TNT_LOCK_OWNED=0
   unset TW_STATE_LOCK_HELD
 }
 

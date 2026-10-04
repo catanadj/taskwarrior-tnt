@@ -8,7 +8,7 @@ This design assumes users upgrade all installed TNT scripts before running scans
 
 ## Current behavior
 
-Notification scans and dismiss callbacks acquire a Bash `mkdir` lock at `.state.lock`. Python action controllers acquire a lock at the same path. The implementations do not recover stale locks the same way: Bash checks the recorded PID, while Python reclaims any lock older than 60 seconds. Both can race while removing a stale lock. Existing tests cover simple Python acquire and release only.
+Notification scans, dismiss callbacks, and the Complete, Start/Stop, and Snooze actions acquire a Bash `mkdir` lock at `.state.lock`. Python action controllers acquire a lock at the same path. The implementations do not recover stale locks the same way: Bash checks the recorded PID, while Python reclaims any lock older than 60 seconds. Both can race while removing a stale lock. Existing tests cover simple Python acquire and release only.
 
 Pre-scan sync runs before the scan acquires the state lock. The scan then holds the lock while reading and updating notification state and posting notifications. Action controllers hold it while inspecting and mutating Taskwarrior state and updating notification state.
 
@@ -18,7 +18,7 @@ Use a persistent regular lock file at `<TW_STATE_DIR>/.state.lockfile`. The new 
 
 Python clients use `fcntl.flock(fd, LOCK_EX | LOCK_NB)` in a monotonic-time retry loop. They release the lock and close the descriptor in a `finally` block. Keep the existing 10-second default timeout and raise `TimeoutError` when it expires.
 
-Bash clients use the Termux `flock` executable with its command form and close-on-exec option to run the protected section. Each script starts a second, internal locked invocation after it has completed any pre-lock work. The outer scanner runs pre-scan sync once, then invokes itself through `flock`; the internal invocation skips sync and performs the scan. The dismiss callback uses the same pattern around its manifest update. This keeps the lock descriptor in the `flock` process instead of passing it to child commands. Use the same 10-second default timeout.
+Bash clients retain the existing `tnt_acquire_state_lock` and `tnt_release_state_lock` calls, backed by the same lock file. Acquisition opens a Bash file descriptor and uses util-linux `flock` in descriptor mode with a bounded wait. Release unlocks and closes the descriptor. Preserve the existing `TW_STATE_LOCK_HELD` reentrant behavior and critical-section boundaries, including early release before follow-up refreshes. Keep the 10-second default timeout. Child processes may inherit the descriptor; current TNT callers run those commands synchronously and explicitly unlock before leaving the protected section.
 
 Both implementations use Linux's `flock(2)` advisory lock API. Require `flock` from the Termux `util-linux` package, check for it during installation and in diagnostics, and document the dependency. Keep the lock file empty and create it with owner-only permissions where possible.
 
@@ -33,9 +33,8 @@ The existing state manifest and snooze files do not change. `TW_STATE_DIR`, the 
 ## Components
 
 - `scripts/taskwarrior_tnt/state.py`: create/open the lock file, acquire/release the Python advisory lock, and retain the context manager interface used by the action controller.
-- `scripts/taskwarrior_tnt_common.sh`: provide `tnt_run_locked`, which invokes a command under the advisory lock with a bounded wait and close-on-exec behavior.
-- `scripts/taskwarrior_notify_due_tasks.sh`: preserve the current pre-scan sync boundary and hold the lock across notification state reads and writes.
-- `scripts/taskwarrior_forget_notification.sh`: protect manifest removal with the same lock file.
+- `scripts/taskwarrior_tnt_common.sh`: implement the existing acquire/release API with a persistent file descriptor and util-linux `flock`.
+- `scripts/taskwarrior_notify_due_tasks.sh`, `scripts/taskwarrior_forget_notification.sh`, `scripts/taskwarrior_complete_task.sh`, `scripts/taskwarrior_start_stop_task.sh`, and `scripts/taskwarrior_snooze_task.sh`: retain their existing lock boundaries and share the advisory lock through the common helper.
 - `install.sh`, `README.md`, and the installer/diagnostic tests: require and explain `flock`.
 - `tests/test_tnt.py`: cover lock behavior and cross-language coordination.
 
